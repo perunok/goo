@@ -4,6 +4,7 @@
   import { ui } from '../../app/ui.svelte'
   import { FONT_SIZE_MAX, FONT_SIZE_MIN } from '../../lib/appearance'
   import { ACCENTS, THEMES, THEME_DEFAULT_ACCENT } from '../../lib/themes'
+  import McpSettings from './McpSettings.svelte'
 
   const light = THEMES.filter((t) => t.scheme === 'light')
   const dark = THEMES.filter((t) => t.scheme === 'dark')
@@ -114,6 +115,8 @@
       Wrap long lines in the editor
     </label>
   </section>
+
+  <McpSettings />
 </Dialog>
 
 <style>

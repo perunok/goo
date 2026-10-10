@@ -3,7 +3,7 @@
  * behaviour where it matters to the UI: paths must be inside the open folder, names get ".md", no overwrites.
  */
 import { SEED_FILES, SEED_ROOT } from './seed'
-import type { BackendError, ErrorCode, GooBackend, Tree, TreeNode, Workspace } from './types'
+import type { BackendError, ErrorCode, GooBackend, McpStatus, Tree, TreeNode, Workspace } from './types'
 
 const fail = (code: ErrorCode, message: string): never => {
   throw { code, message } satisfies BackendError
@@ -18,6 +18,20 @@ export function createMockBackend(opts: { latencyMs?: number; files?: Record<str
   const files = new Map<string, string>(Object.entries(opts.files ?? SEED_FILES).map(([rel, text]) => [`${root}/${rel}`, text]))
   const workspace: Workspace = { root, name: root.split('/').pop()! }
   let open: Workspace | null = null
+  // MCP needs the desktop app; the browser mock only shows the settings UI.
+  const mcp: McpStatus = {
+    enabled: false,
+    running: false,
+    port: 7355,
+    url: null,
+    error: null,
+    token: 'goo_mock-token',
+    command: '/usr/bin/goo',
+    args: ['--mcp-stdio'],
+    devBuild: true,
+    claudeCode: { found: false, connected: 'no' },
+  }
+  const mcpNow = () => ({ ...mcp, url: mcp.running ? `http://127.0.0.1:${mcp.port}/mcp` : null })
   const wait = () => new Promise((r) => setTimeout(r, opts.latencyMs ?? 0))
 
   const inside = (path: string) => {
@@ -112,5 +126,26 @@ export function createMockBackend(opts: { latencyMs?: number; files?: Record<str
     },
     async dropOpenRequest() {},
     onOpenRequest() {},
+    async setUnsaved() {},
+    onFilesChanged() {},
+    onMcpActivity() {},
+    async mcpStatus() {
+      return mcpNow()
+    },
+    async mcpSetEnabled(enabled) {
+      mcp.enabled = enabled
+      mcp.running = enabled
+      return mcpNow()
+    },
+    async mcpNewToken() {
+      mcp.token = `goo_mock-${Math.random().toString(16).slice(2)}`
+      return mcpNow()
+    },
+    async mcpConnectClaudeCode() {
+      return fail('io', 'Claude Code is only connected from the desktop app')
+    },
+    async mcpDisconnectClaudeCode() {
+      return mcpNow()
+    },
   }
 }

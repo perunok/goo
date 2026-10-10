@@ -6,6 +6,8 @@
 //! handed over by the single-instance plugin) stores the path as a pending request and tells the UI with an
 //! `open-request` event; the UI asks about unsaved changes if needed, then claims it with `take_open_request`.
 
+mod mcp;
+
 use goo_core::{CoreError, ErrorCode, Recents, Tree};
 use serde::Serialize;
 use std::path::{Path, PathBuf};
@@ -25,6 +27,8 @@ struct AppState {
     pending_open: Mutex<Vec<PathBuf>>,
     /// A folder picker is on screen (only one at a time).
     picking: AtomicBool,
+    /// Notes with unsaved edits in the window (reported by the UI); AI assistants may not write them.
+    unsaved: Mutex<Vec<PathBuf>>,
 }
 
 #[derive(Serialize)]
@@ -242,7 +246,14 @@ pub fn run() {
                 recents_file: config.join("recent-workspaces.json"),
                 pending_open: Mutex::new(goo_core::launch_paths(&args, &cwd)),
                 picking: AtomicBool::new(false),
+                unsaved: Mutex::new(Vec::new()),
             });
+            if Some(&config) != goo_mcp::files::app_config_dir().as_ref() {
+                eprintln!("goo: config dir {} differs from the MCP bridge's guess; `goo --mcp-stdio` may not find the app", config.display());
+            }
+            let mcp = mcp::Mcp::new(&config);
+            mcp.apply(app.handle());
+            app.manage(mcp);
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -257,10 +268,20 @@ pub fn run() {
             open_external,
             take_open_request,
             drop_open_request,
+            mcp::mcp_status,
+            mcp::mcp_set_enabled,
+            mcp::mcp_new_token,
+            mcp::mcp_connect_claude_code,
+            mcp::mcp_disconnect_claude_code,
+            mcp::set_unsaved,
         ])
         .build(tauri::generate_context!())
         .expect("error while building goo")
         .run(|_app, _event| {
+            if let tauri::RunEvent::Exit = &_event {
+                // assistants must not find a stale endpoint.json
+                _app.state::<mcp::Mcp>().shutdown();
+            }
             // macOS hands files from Finder ("Open With", double click) to the running app as an event, not as
             // arguments.
             #[cfg(target_os = "macos")]

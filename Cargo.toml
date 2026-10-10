@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["src-tauri", "crates/goo-core"]
+members = ["src-tauri", "crates/goo-core", "crates/goo-mcp"]
 
 [profile.release]
 codegen-units = 1

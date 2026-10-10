@@ -24,8 +24,28 @@ Plain Markdown, your folders, your colours: read [the Goo Manifesto](#manifesto)
   the next start.
 - **Links between notes**: `[see this](../other.md#section)` opens the other note and scrolls to the heading. Web
   links open in your browser.
+- **AI assistants (MCP)**: turn on Settings > AI assistants and Claude (Code or Desktop), Cursor, VS Code and other
+  MCP clients can list, read, search, create and edit your notes, and show a note in goo. See [AI assistants](#ai-assistants-mcp).
 - **Safe by default**: rendered notes are sanitised (no scripts, no event handlers, no remote content), Mermaid runs
   in `strict` mode, and the Rust side refuses any file path outside the folder you opened.
+
+## AI assistants (MCP)
+
+goo has a built-in [MCP](https://modelcontextprotocol.io) server, **off until you turn it on** in Settings > AI
+assistants (MCP). There you can connect Claude Code with one click, or copy a ready-made config for Claude Desktop,
+Cursor, Windsurf, VS Code or any Streamable-HTTP client. Assistants run `goo --mcp-stdio`, which talks to the open goo
+(and starts it if it is closed).
+
+| Tool | What it does |
+| --- | --- |
+| `list_workspaces` | Folders you opened in goo, and which one is open |
+| `list_notes`, `read_note`, `search_notes` | Browse, read and search notes |
+| `create_note`, `edit_note`, `append_to_note`, `write_note` | Create and change notes (missing folders are created) |
+| `open_in_app` | Show a note in the goo window |
+
+Rules: only folders you opened in goo are reachable, paths cannot leave them, notes with unsaved edits in goo are
+never overwritten, and there is no delete. Changes show up in goo at once. The endpoint listens on `127.0.0.1`
+only, needs a token (Settings can issue a new one) and turns away browser requests.
 
 ## Keyboard
 
@@ -64,7 +84,7 @@ Checks:
 ```bash
 npm run typecheck     # svelte-check
 npm test              # Vitest: renderer, themes (contrast of every theme x accent), paths, settings
-npm run test:rust     # goo-core: tree listing, path guarding, atomic writes, recents
+npm run test:rust     # goo-core and goo-mcp: files, path guarding, search, MCP protocol, endpoint, bridge
 ```
 
 ## Releases
@@ -95,6 +115,7 @@ src/                 Svelte 5 UI (TypeScript)
   styles/themes.css  every colour in the app (31 themes, 18 accents)
 src-tauri/           the Tauri shell: window, plugins and the commands the UI calls
 crates/goo-core/     file logic in plain Rust (no Tauri), unit-tested on its own
+crates/goo-mcp/      MCP server: note tools, localhost endpoint, `goo --mcp-stdio` bridge (no Tauri)
 ```
 
 - The UI never touches the disk itself; it calls a handful of commands (`list_tree`, `read_file`, `write_file`,

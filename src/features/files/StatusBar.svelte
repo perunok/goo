@@ -18,6 +18,9 @@
 </script>
 
 <footer class="status">
+  {#if ui.assistantTool}
+    <span class="assistant" title="An AI assistant is using goo (MCP)">AI assistant: {ui.assistantTool.replace(/_/g, ' ')}…</span>
+  {/if}
   <span class="path">
     {#if doc && workspace.workspace}{relativeTo(workspace.workspace.root, doc.path)}{:else if workspace.workspace}{workspace.workspace.root}{/if}
   </span>
@@ -52,6 +55,10 @@
   }
   .unsaved {
     color: var(--accent-text);
+  }
+  .assistant {
+    color: var(--accent-text);
+    white-space: nowrap;
   }
   .theme {
     display: inline-flex;

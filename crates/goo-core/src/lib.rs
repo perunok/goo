@@ -203,6 +203,130 @@ pub fn new_file_path(root: &Path, dir: &Path, name: &str) -> Result<PathBuf> {
 }
 
 // ---------------------------------------------------------------------------
+// Workspace-relative paths (what AI assistants use)
+// ---------------------------------------------------------------------------
+
+/// Checks a workspace-relative path like `projects/plan.md`: relative, every part a valid name (no `..`, no
+/// separators tricks). Accepts `/` and `\\` as separators.
+pub fn relative_parts(rel: &str) -> Result<Vec<&str>> {
+    let bad = || CoreError::new(ErrorCode::InvalidName, format!("\"{rel}\" is not a path inside the folder (use e.g. notes/plan.md)"));
+    let trimmed = rel.trim();
+    if trimmed.is_empty() || trimmed.starts_with('/') || trimmed.starts_with('\\') || Path::new(trimmed).is_absolute() {
+        return Err(bad());
+    }
+    let parts: Vec<&str> = trimmed.split(['/', '\\']).filter(|p| !p.is_empty() && *p != ".").collect();
+    if parts.is_empty() {
+        return Err(bad());
+    }
+    for p in &parts {
+        validate_name(p).map_err(|_| bad())?;
+    }
+    Ok(parts)
+}
+
+/// An existing note inside `root`, from a workspace-relative path.
+pub fn resolve_note(root: &Path, rel: &str) -> Result<PathBuf> {
+    let parts = relative_parts(rel)?;
+    let path = parts.iter().fold(root.to_path_buf(), |p, part| p.join(part));
+    let resolved = resolve_inside(root, &path)?;
+    if !resolved.is_file() {
+        return Err(CoreError::new(ErrorCode::NotFound, format!("{rel} is not a file")));
+    }
+    Ok(resolved)
+}
+
+/// `path` relative to `root` with `/` separators (for tool results).
+pub fn relative_string(root: &Path, path: &Path) -> String {
+    path.strip_prefix(root)
+        .unwrap_or(path)
+        .components()
+        .map(|c| c.as_os_str().to_string_lossy().into_owned())
+        .collect::<Vec<_>>()
+        .join("/")
+}
+
+/// Creates a note at a workspace-relative path, making missing folders on the way. `.md` is appended unless the name
+/// already has a Markdown extension. Never overwrites.
+pub fn create_note_at(root: &Path, rel: &str, contents: &str) -> Result<PathBuf> {
+    let mut parts = relative_parts(rel)?;
+    let file_name = parts.pop().unwrap();
+    let mut dir = root.to_path_buf();
+    for part in parts {
+        dir.push(part);
+        if !dir.exists() {
+            fs::create_dir(&dir)?;
+        }
+        // a symlinked folder must still point inside the workspace
+        dir = resolve_inside(root, &dir)?;
+    }
+    let file = new_file_path(root, &dir, file_name)?;
+    create_new(&file, contents)?;
+    Ok(file)
+}
+
+/// Every note under `root` (same filters as the tree), as paths.
+pub fn list_notes(root: &Path) -> Result<(Vec<PathBuf>, bool)> {
+    fn collect(nodes: &[TreeNode], out: &mut Vec<PathBuf>) {
+        for n in nodes {
+            match &n.children {
+                Some(c) => collect(c, out),
+                None => out.push(PathBuf::from(&n.path)),
+            }
+        }
+    }
+    let tree = list_tree(root)?;
+    let mut out = Vec::new();
+    collect(&tree.nodes, &mut out);
+    Ok((out, tree.truncated))
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct SearchHit {
+    /// Workspace-relative path.
+    pub path: String,
+    /// 1-based line number.
+    pub line: usize,
+    pub text: String,
+}
+
+/// Case-insensitive search over the notes' names and text. At most `limit` hits, at most 5 per note; a match in the
+/// file name is reported as line 0.
+pub fn search_notes(root: &Path, query: &str, limit: usize) -> Result<Vec<SearchHit>> {
+    let q = query.trim().to_lowercase();
+    if q.is_empty() {
+        return Err(CoreError::new(ErrorCode::InvalidName, "the search text is empty"));
+    }
+    let (notes, _) = list_notes(root)?;
+    let mut hits = Vec::new();
+    for note in notes {
+        let rel = relative_string(root, &note);
+        let mut per_note = 0;
+        if rel.to_lowercase().contains(&q) {
+            hits.push(SearchHit { path: rel.clone(), line: 0, text: rel.clone() });
+            per_note += 1;
+        }
+        let Ok(text) = read_text(&note) else { continue };
+        for (i, line) in text.lines().enumerate() {
+            if hits.len() >= limit || per_note >= 5 {
+                break;
+            }
+            if line.to_lowercase().contains(&q) {
+                let mut t: String = line.trim().chars().take(240).collect();
+                if line.trim().chars().count() > 240 {
+                    t.push('…');
+                }
+                hits.push(SearchHit { path: rel.clone(), line: i + 1, text: t });
+                per_note += 1;
+            }
+        }
+        if hits.len() >= limit {
+            break;
+        }
+    }
+    Ok(hits)
+}
+
+// ---------------------------------------------------------------------------
 // Reading and writing
 // ---------------------------------------------------------------------------
 

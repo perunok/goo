@@ -18,7 +18,7 @@
     "typecheck": "svelte-check --tsconfig ./tsconfig.json",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:rust": "cargo test -p goo-core"
+    "test:rust": "cargo test -p goo-core -p goo-mcp"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^7.3.1",

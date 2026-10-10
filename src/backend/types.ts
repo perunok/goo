@@ -55,6 +55,27 @@ export interface OpenEvent {
   switch: boolean
 }
 
+/** AI assistant access (MCP), see src-tauri/src/mcp.rs. */
+export interface McpStatus {
+  enabled: boolean
+  running: boolean
+  port: number
+  url: string | null
+  error: string | null
+  token: string
+  /** What assistants run: `command args...`. */
+  command: string
+  args: string[]
+  devBuild: boolean
+  claudeCode: { found: boolean; connected: 'no' | 'yes' | 'outdated' }
+}
+
+/** Notes an AI assistant created or changed on disk. */
+export interface FilesChanged {
+  root: string
+  files: string[]
+}
+
 export interface GooBackend {
   readonly kind: 'tauri' | 'mock'
   /** Native folder picker; null when cancelled. */
@@ -82,6 +103,16 @@ export interface GooBackend {
   dropOpenRequest(): Promise<void>
   /** Files opened while the app runs (second launch, macOS Finder), and paths that cannot be opened. */
   onOpenRequest(handler: (e: OpenEvent) => void, onError: (message: string) => void): void
+  /** Tells the backend which notes have unsaved edits (AI assistants may not write them). */
+  setUnsaved(paths: string[]): Promise<void>
+  onFilesChanged(handler: (e: FilesChanged) => void): void
+  /** An AI assistant is running a tool. */
+  onMcpActivity(handler: (tool: string) => void): void
+  mcpStatus(): Promise<McpStatus>
+  mcpSetEnabled(enabled: boolean): Promise<McpStatus>
+  mcpNewToken(): Promise<McpStatus>
+  mcpConnectClaudeCode(): Promise<McpStatus>
+  mcpDisconnectClaudeCode(): Promise<McpStatus>
 }
 
 export function isBackendError(e: unknown): e is BackendError {
