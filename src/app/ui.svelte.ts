@@ -27,6 +27,9 @@ class Ui {
   dialog = $state<DialogName>(null)
   toasts = $state<Toast[]>([])
   confirmRequest = $state<ConfirmRequest | null>(null)
+  /** The MCP tool an AI assistant is running (shown in the status bar for a moment). */
+  assistantTool = $state<string | null>(null)
+  private assistantTimer: ReturnType<typeof setTimeout> | null = null
   promptRequest = $state<PromptRequest | null>(null)
   private nextId = 1
 
@@ -36,6 +39,12 @@ class Ui {
 
   close() {
     this.dialog = null
+  }
+
+  assistantBusy(tool: string) {
+    this.assistantTool = tool
+    if (this.assistantTimer) clearTimeout(this.assistantTimer)
+    this.assistantTimer = setTimeout(() => (this.assistantTool = null), 2500)
   }
 
   toast(text: string, kind: Toast['kind'] = 'info', ms = kind === 'error' ? 6000 : 2500) {

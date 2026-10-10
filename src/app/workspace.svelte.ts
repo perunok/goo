@@ -2,7 +2,7 @@
  * The open folder, its file tree and the open documents (tabs). All I/O goes through `backend`; failures become
  * toasts, never unhandled rejections.
  */
-import type { OpenEvent, OpenRequest, Tree, TreeNode, Workspace } from '../backend/types'
+import type { FilesChanged, OpenEvent, OpenRequest, Tree, TreeNode, Workspace } from '../backend/types'
 import { errorMessage } from '../backend/types'
 import { basename, relativeTo, stem } from '../lib/paths'
 import { backend } from './backend'
@@ -43,6 +43,13 @@ class WorkspaceStore {
 
   active = $derived(this.docs.find((d) => d.path === this.activePath) ?? null)
   dirtyCount = $derived(this.docs.filter(isDirty).length)
+  /** Paths with unsaved edits, as one string so effects only re-run when the set changes (not on every keystroke). */
+  unsavedKey = $derived(
+    this.docs
+      .filter(isDirty)
+      .map((d) => d.path)
+      .join('\n'),
+  )
 
   async init() {
     backend.guardClose(
@@ -53,6 +60,8 @@ class WorkspaceStore {
       (e) => void this.handleOpenEvent(e),
       (message) => ui.toast(message, 'error'),
     )
+    backend.onFilesChanged((e) => void this.handleFilesChanged(e))
+    backend.onMcpActivity((tool) => ui.assistantBusy(tool))
     await this.loadRecents()
     // Started with a file or folder ("Open with goo", `goo notes.md`): that wins over the last session.
     if (await this.takeOpenRequest()) return
@@ -93,6 +102,30 @@ class WorkspaceStore {
       ui.toast(`Not opened (not a note in ${req.workspace.name}): ${names}`)
     }
     return true
+  }
+
+  /**
+   * An AI assistant created or changed notes on disk: refresh the tree, and reload open notes that have no unsaved
+   * edits (the backend refuses to write notes that do, so this is only a fallback message).
+   */
+  private async handleFilesChanged(e: FilesChanged) {
+    if (!this.workspace || e.root !== this.workspace.root) return
+    await this.refreshTree()
+    for (const path of e.files) {
+      const d = this.docs.find((x) => x.path === path)
+      if (!d) continue
+      if (isDirty(d)) {
+        ui.toast(`${d.name} changed on disk; your unsaved edits are kept.`)
+        continue
+      }
+      try {
+        const text = await backend.readFile(path)
+        d.text = text
+        d.savedText = text
+      } catch (err) {
+        ui.toast(errorMessage(err), 'error')
+      }
+    }
   }
 
   async loadRecents() {

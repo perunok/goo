@@ -200,3 +200,51 @@ fn plan_open_takes_a_whole_selection_into_one_window() {
     assert_eq!(p.files, [root.join("other/x.md")]);
     assert_eq!(p.skipped, [root.join("a.md")]);
 }
+
+#[test]
+fn relative_paths_stay_inside_the_folder() {
+    for ok in ["a.md", "notes/plan.md", "notes\\plan.md", "./x/./y.md"] {
+        assert!(relative_parts(ok).is_ok(), "{ok}");
+    }
+    for bad in ["", "/etc/passwd", "../x.md", "a/../../x.md", "a/:b.md", "\\\\server\\x.md"] {
+        assert!(relative_parts(bad).is_err(), "{bad:?}");
+    }
+}
+
+#[test]
+fn create_note_at_makes_folders_and_never_overwrites() {
+    let (_d, root) = ws();
+    let p = create_note_at(&root, "projects/goo/plan", "# Plan\n").unwrap();
+    assert_eq!(p, root.join("projects/goo/plan.md"));
+    assert_eq!(read_text(&p).unwrap(), "# Plan\n");
+    assert_eq!(create_note_at(&root, "projects/goo/plan.md", "x").unwrap_err().code, ErrorCode::AlreadyExists);
+    assert!(create_note_at(&root, "../escape.md", "x").is_err());
+    assert_eq!(resolve_note(&root, "projects/goo/plan.md").unwrap(), p);
+    assert_eq!(resolve_note(&root, "projects").unwrap_err().code, ErrorCode::NotFound);
+    assert_eq!(relative_string(&root, &p), "projects/goo/plan.md");
+}
+
+#[cfg(unix)]
+#[test]
+fn create_note_at_refuses_symlinked_folders_that_escape() {
+    let (_d, root) = ws();
+    let outside = tempfile::tempdir().unwrap();
+    std::os::unix::fs::symlink(outside.path(), root.join("link")).unwrap();
+    assert_eq!(create_note_at(&root, "link/x.md", "x").unwrap_err().code, ErrorCode::OutsideWorkspace);
+    assert!(!outside.path().join("x.md").exists());
+}
+
+#[test]
+fn search_finds_names_and_lines() {
+    let (_d, root) = ws();
+    touch(&root.join("Groceries.md"), "# List\n- milk\n- Oat MILK\n");
+    touch(&root.join("work/notes.md"), "nothing here\nmilkshake idea\n");
+    touch(&root.join("skip.txt"), "milk");
+    let hits = search_notes(&root, "milk", 50).unwrap();
+    let got: Vec<_> = hits.iter().map(|h| (h.path.as_str(), h.line)).collect();
+    // tree order: folders first
+    assert_eq!(got, [("work/notes.md", 2), ("Groceries.md", 2), ("Groceries.md", 3)]);
+    assert_eq!(search_notes(&root, "groceries", 50).unwrap()[0].line, 0);
+    assert_eq!(search_notes(&root, "milk", 1).unwrap().len(), 1);
+    assert!(search_notes(&root, "  ", 5).is_err());
+}

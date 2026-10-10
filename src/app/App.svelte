@@ -30,6 +30,12 @@
     void backend.setWindowTitle(parts.join(' — ')).catch(() => {})
   })
 
+  // AI assistants (MCP) may not write notes with unsaved edits: keep the backend's list current.
+  $effect(() => {
+    const key = workspace.unsavedKey
+    void backend.setUnsaved(key ? key.split('\n') : []).catch(() => {})
+  })
+
   function onkeydown(e: KeyboardEvent) {
     if (handleShortcut(e)) e.preventDefault()
   }

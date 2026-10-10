@@ -10,7 +10,7 @@ npm run dev            # UI only, browser, in-memory mock backend (src/backend/m
 npm run app:dev        # real desktop app (needs the Tauri Linux prerequisites, see README)
 npm run typecheck      # svelte-check
 npm test               # vitest (jsdom): src/**/*.test.ts
-npm run test:rust      # cargo test -p goo-core
+npm run test:rust      # cargo test -p goo-core -p goo-mcp
 npm run app:build      # installers
 ```
 
@@ -22,6 +22,12 @@ npm run app:build      # installers
 - `crates/goo-core`: all file logic (tree, path guard, atomic write, recents), no Tauri dependency, unit-tested.
   `src-tauri/src/lib.rs`: thin commands over it. Every path from the UI goes through `resolve_inside` against the open
   root; `open_workspace` only accepts folders already in the recent list (picked via the native dialog).
+- `crates/goo-mcp`: MCP server (no Tauri). `tools.rs` (note tools + `Host` trait), `protocol.rs` (stateless JSON-RPC),
+  `http.rs` (tiny_http on 127.0.0.1, Bearer token, Host check, no Origin), `bridge.rs` (`goo --mcp-stdio`, handled in
+  `src-tauri/src/main.rs` before Tauri starts; starts the app when `launch.json` allows), `files.rs` (settings /
+  endpoint.json / launch.json in `<config>/mcp/`, 0600). `src-tauri/src/mcp.rs` implements `Host` and the settings
+  commands; the UI reports unsaved notes (`set_unsaved`) and reloads on `files-changed`. Same design as Slinger's
+  `electron/mcp/`. The bridge must not pool HTTP connections (a stopped endpoint would hang it).
 - UI talks to the outside only through `GooBackend` (`src/backend/types.ts`). Adding a command touches:
   goo-core (+ test) -> `src-tauri/src/lib.rs` (+ `generate_handler!`) -> `types.ts` -> `tauri.ts` -> `mock.ts`.
   Window-level JS APIs need a permission in `src-tauri/capabilities/default.json`.

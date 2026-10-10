@@ -1,7 +1,7 @@
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { getCurrentWindow } from '@tauri-apps/api/window'
-import type { GooBackend, OpenEvent, OpenRequest, Tree, Workspace } from './types'
+import type { FilesChanged, GooBackend, McpStatus, OpenEvent, OpenRequest, Tree, Workspace } from './types'
 
 /** The Rust side (src-tauri/src/lib.rs); argument names match the command parameters. */
 export const tauriBackend: GooBackend = {
@@ -28,6 +28,18 @@ export const tauriBackend: GooBackend = {
     void listen<OpenEvent>('open-request', (e) => handler(e.payload))
     void listen<string>('open-error', (e) => onError(e.payload))
   },
+  setUnsaved: (paths) => invoke<void>('set_unsaved', { paths }),
+  onFilesChanged(handler) {
+    void listen<FilesChanged>('files-changed', (e) => handler(e.payload))
+  },
+  onMcpActivity(handler) {
+    void listen<string>('mcp-activity', (e) => handler(e.payload))
+  },
+  mcpStatus: () => invoke<McpStatus>('mcp_status'),
+  mcpSetEnabled: (enabled) => invoke<McpStatus>('mcp_set_enabled', { enabled }),
+  mcpNewToken: () => invoke<McpStatus>('mcp_new_token'),
+  mcpConnectClaudeCode: () => invoke<McpStatus>('mcp_connect_claude_code'),
+  mcpDisconnectClaudeCode: () => invoke<McpStatus>('mcp_disconnect_claude_code'),
 }
 
 export function inTauri(): boolean {
