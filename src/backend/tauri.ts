@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core'
+import { listen } from '@tauri-apps/api/event'
 import { getCurrentWindow } from '@tauri-apps/api/window'
-import type { GooBackend, Tree, Workspace } from './types'
+import type { GooBackend, OpenEvent, OpenRequest, Tree, Workspace } from './types'
 
 /** The Rust side (src-tauri/src/lib.rs); argument names match the command parameters. */
 export const tauriBackend: GooBackend = {
@@ -20,6 +21,12 @@ export const tauriBackend: GooBackend = {
     void getCurrentWindow().onCloseRequested(async (event) => {
       if (hasUnsaved() && !(await ask())) event.preventDefault()
     })
+  },
+  takeOpenRequest: () => invoke<OpenRequest | null>('take_open_request'),
+  dropOpenRequest: () => invoke<void>('drop_open_request'),
+  onOpenRequest(handler, onError) {
+    void listen<OpenEvent>('open-request', (e) => handler(e.payload))
+    void listen<string>('open-error', (e) => onError(e.payload))
   },
 }
 

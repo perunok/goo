@@ -1,0 +1,16 @@
+[Desktop Entry]
+Categories={{categories}}
+{{#if comment}}
+Comment={{comment}}
+{{/if}}
+Exec={{exec}} %F
+StartupWMClass={{exec}}
+Icon={{icon}}
+Name={{name}}
+GenericName=Markdown Editor
+Keywords=markdown;notes;editor;mermaid;md;
+Terminal=false
+Type=Application
+{{#if mime_type}}
+MimeType={{mime_type}};
+{{/if}}

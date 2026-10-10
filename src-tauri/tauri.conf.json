@@ -59,9 +59,26 @@
     },
     "linux": {
       "deb": {
-        "section": "editors"
+        "section": "editors",
+        "desktopTemplate": "linux/goo.desktop"
       },
-      "rpm": {}
-    }
+      "rpm": {
+        "desktopTemplate": "linux/goo.desktop"
+      }
+    },
+    "fileAssociations": [
+      {
+        "ext": [
+          "md",
+          "markdown",
+          "mdown",
+          "mkd"
+        ],
+        "name": "Markdown document",
+        "description": "Markdown document",
+        "role": "Editor",
+        "mimeType": "text/markdown"
+      }
+    ]
   }
 }

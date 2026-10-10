@@ -22,9 +22,26 @@ interface UiPrefs {
   viewMode: ViewMode
   sidebar: boolean
   wrap: boolean
+  /** Max width of the text column in px (preview, and the editor in edit-only mode); 0 = full width. */
+  readingWidth: number
 }
 
-const DEFAULT_UI: UiPrefs = { viewMode: 'split', sidebar: true, wrap: true }
+export const READING_WIDTH_MIN = 480
+export const READING_WIDTH_MAX = 1600
+export const READING_WIDTH_PRESETS: { label: string; width: number }[] = [
+  { label: 'Narrow', width: 640 },
+  { label: 'Medium', width: 820 },
+  { label: 'Wide', width: 1100 },
+  { label: 'Full', width: 0 },
+]
+
+const DEFAULT_UI: UiPrefs = { viewMode: 'split', sidebar: true, wrap: true, readingWidth: 820 }
+
+export function sanitizeReadingWidth(v: unknown): number {
+  if (typeof v !== 'number' || !Number.isFinite(v)) return DEFAULT_UI.readingWidth
+  if (v === 0) return 0
+  return Math.round(Math.min(READING_WIDTH_MAX, Math.max(READING_WIDTH_MIN, v)))
+}
 
 function loadUi(): UiPrefs {
   try {
@@ -33,6 +50,7 @@ function loadUi(): UiPrefs {
       viewMode: VIEW_MODES.includes(raw.viewMode as ViewMode) ? (raw.viewMode as ViewMode) : DEFAULT_UI.viewMode,
       sidebar: typeof raw.sidebar === 'boolean' ? raw.sidebar : DEFAULT_UI.sidebar,
       wrap: typeof raw.wrap === 'boolean' ? raw.wrap : DEFAULT_UI.wrap,
+      readingWidth: sanitizeReadingWidth(raw.readingWidth),
     }
   } catch {
     return { ...DEFAULT_UI }
@@ -71,6 +89,7 @@ class Settings {
   }
 
   setUi(patch: Partial<UiPrefs>) {
+    if (patch.readingWidth !== undefined) patch = { ...patch, readingWidth: sanitizeReadingWidth(patch.readingWidth) }
     this.ui = { ...this.ui, ...patch }
     browserStore.set(UI_KEY, JSON.stringify(this.ui))
   }

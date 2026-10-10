@@ -129,3 +129,53 @@ fn recents_are_most_recent_first_unique_and_capped() {
     assert_eq!(back.workspaces, r.workspaces);
     assert!(Recents::load(&root.join("missing.json")).workspaces.is_empty());
 }
+
+#[test]
+fn launch_path_takes_the_first_existing_argument() {
+    let (_d, root) = ws();
+    touch(&root.join("My Notes/a b.md"), "");
+    let args = |v: &[&str]| v.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+    // relative to cwd, flags skipped, missing files skipped
+    let got = launch_path(&args(&["goo", "--verbose", "missing.md", "My Notes/a b.md"]), &root).unwrap();
+    assert_eq!(got, root.join("My Notes/a b.md"));
+    // file:// URIs from file managers
+    let uri = format!("file://{}/My%20Notes/a%20b.md", root.display());
+    assert_eq!(launch_path(&args(&["goo", &uri]), Path::new("/")).unwrap(), root.join("My Notes/a b.md"));
+    assert!(launch_path(&args(&["goo"]), &root).is_none());
+    assert!(launch_path(&args(&["goo", "nope.md"]), &root).is_none());
+}
+
+#[test]
+fn file_uris_decode_to_local_paths_only() {
+    assert_eq!(file_uri_to_path("file:///home/a/x%2By.md").unwrap(), PathBuf::from("/home/a/x+y.md"));
+    assert_eq!(file_uri_to_path("file://localhost/tmp/a.md").unwrap(), PathBuf::from("/tmp/a.md"));
+    assert_eq!(file_uri_to_path("file:///C:/notes/a.md").unwrap(), PathBuf::from("C:/notes/a.md"));
+    assert_eq!(file_uri_to_path("file:///bad%zz").unwrap(), PathBuf::from("/bad%zz"));
+    assert_eq!(file_uri_to_path("file:///caf%C3%A9/%é.md").unwrap(), PathBuf::from("/café/%é.md"));
+    assert!(file_uri_to_path("file://server/share/a.md").is_none());
+    assert!(file_uri_to_path("https://x/a.md").is_none());
+}
+
+#[test]
+fn plan_open_keeps_the_workspace_when_the_note_is_inside_it() {
+    let (_d, root) = ws();
+    touch(&root.join("sub/n.md"), "");
+    touch(&root.join("other/x.md"), "");
+    touch(&root.join("img.png"), "");
+
+    // nothing open: the note's folder becomes the workspace
+    let p = plan_open(None, &root.join("sub/n.md")).unwrap();
+    assert_eq!(p, OpenPlan { root: root.join("sub"), file: Some(root.join("sub/n.md")), switch: true });
+    // inside the open folder: stay
+    let p = plan_open(Some(&root), &root.join("sub/n.md")).unwrap();
+    assert_eq!(p, OpenPlan { root: root.clone(), file: Some(root.join("sub/n.md")), switch: false });
+    // outside it: switch to the note's folder
+    let p = plan_open(Some(&root.join("sub")), &root.join("other/x.md")).unwrap();
+    assert!(p.switch);
+    assert_eq!(p.root, root.join("other"));
+    // folders open as the workspace
+    assert_eq!(plan_open(Some(&root), &root).unwrap().switch, false);
+    assert_eq!(plan_open(None, &root.join("sub")).unwrap(), OpenPlan { root: root.join("sub"), file: None, switch: true });
+    // only Markdown
+    assert_eq!(plan_open(None, &root.join("img.png")).unwrap_err().code, ErrorCode::InvalidName);
+}

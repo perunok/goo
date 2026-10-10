@@ -38,6 +38,21 @@ export interface BackendError {
   message: string
 }
 
+/** A file or folder opened from outside the app ("Open with goo", `goo notes.md`), once taken. */
+export interface OpenRequest {
+  workspace: Workspace
+  /** The note to open; null when a folder was opened. */
+  file: string | null
+  /** The open folder changed. */
+  switched: boolean
+}
+
+/** Announces an open request while the app runs; `switch` = it leaves the current folder. */
+export interface OpenEvent {
+  path: string
+  switch: boolean
+}
+
 export interface GooBackend {
   readonly kind: 'tauri' | 'mock'
   /** Native folder picker; null when cancelled. */
@@ -59,6 +74,12 @@ export interface GooBackend {
    * In a browser only the native "leave site?" prompt is possible.
    */
   guardClose(hasUnsaved: () => boolean, ask: () => Promise<boolean>): void
+  /** Claims the pending open request (from the launch arguments or the last `open-request` event). */
+  takeOpenRequest(): Promise<OpenRequest | null>
+  /** Discards it (the user chose to stay). */
+  dropOpenRequest(): Promise<void>
+  /** Files opened while the app runs (second launch, macOS Finder), and paths that cannot be opened. */
+  onOpenRequest(handler: (e: OpenEvent) => void, onError: (message: string) => void): void
 }
 
 export function isBackendError(e: unknown): e is BackendError {

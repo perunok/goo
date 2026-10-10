@@ -17,6 +17,7 @@ export const ICONS = {
   search: 'M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14Zm9 3-4.3-4.3',
   check: 'M5 12.5l4.5 4.5L19 7.5',
   x: 'M6 6l12 12M18 6 6 18',
+  width: 'M4 5v14M20 5v14M8 12h8M8 12l2.5-2.5M8 12l2.5 2.5M16 12l-2.5-2.5M16 12l-2.5 2.5',
 } as const
 
 export type IconName = keyof typeof ICONS

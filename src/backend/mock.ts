@@ -106,5 +106,11 @@ export function createMockBackend(opts: { latencyMs?: number; files?: Record<str
         if (hasUnsaved()) e.preventDefault()
       })
     },
+    // A browser has no "Open with"; nothing is ever pending.
+    async takeOpenRequest() {
+      return null
+    },
+    async dropOpenRequest() {},
+    onOpenRequest() {},
   }
 }

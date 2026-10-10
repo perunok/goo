@@ -282,6 +282,81 @@ impl Recents {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Opening from outside ("Open with" in a file manager, `goo notes.md`, macOS open events)
+// ---------------------------------------------------------------------------
+
+/// The path to open from a command line (`argv[0]` is the program). Flags are skipped, `file://` URIs (what some file
+/// managers pass) are decoded, relative paths are resolved against `cwd`. The first argument that exists wins.
+pub fn launch_path(args: &[String], cwd: &Path) -> Option<PathBuf> {
+    args.iter().skip(1).filter(|a| !a.starts_with('-')).find_map(|a| {
+        let p = file_uri_to_path(a).unwrap_or_else(|| PathBuf::from(a));
+        let p = if p.is_absolute() { p } else { cwd.join(p) };
+        p.exists().then_some(p)
+    })
+}
+
+/// `file:///home/a/My%20Notes.md` -> `/home/a/My Notes.md`. None for anything that is not a local file URI.
+pub fn file_uri_to_path(uri: &str) -> Option<PathBuf> {
+    let rest = uri.strip_prefix("file://")?;
+    // `file://localhost/x` and `file:///x` are local; `file://host/x` is not.
+    let rest = rest.strip_prefix("localhost").unwrap_or(rest);
+    if !rest.starts_with('/') {
+        return None;
+    }
+    let bytes = rest.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%' && i + 2 < bytes.len() {
+            let hex = |b: u8| (b as char).to_digit(16);
+            if let (Some(h), Some(l)) = (hex(bytes[i + 1]), hex(bytes[i + 2])) {
+                out.push((h * 16 + l) as u8);
+                i += 3;
+                continue;
+            }
+        }
+        out.push(bytes[i]);
+        i += 1;
+    }
+    let decoded = String::from_utf8(out).ok()?;
+    // Windows: file:///C:/notes/a.md -> C:/notes/a.md
+    let decoded = match decoded.as_bytes() {
+        [b'/', d, b':', ..] if d.is_ascii_alphabetic() => decoded[1..].to_string(),
+        _ => decoded,
+    };
+    Some(PathBuf::from(decoded))
+}
+
+/// What opening `path` from outside means for the app.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OpenPlan {
+    /// The folder to show (canonical).
+    pub root: PathBuf,
+    /// The note to open in it, if a file was given.
+    pub file: Option<PathBuf>,
+    /// False when `root` is the folder already open (no switch, no "unsaved changes" question needed).
+    pub switch: bool,
+}
+
+/// A folder opens as the workspace. A note opens in the current workspace when it lies inside it, otherwise its own
+/// folder becomes the workspace.
+pub fn plan_open(current_root: Option<&Path>, path: &Path) -> Result<OpenPlan> {
+    let path = fs::canonicalize(path)?;
+    if path.is_dir() {
+        let switch = current_root != Some(path.as_path());
+        return Ok(OpenPlan { root: path, file: None, switch });
+    }
+    if !is_markdown(&path) {
+        return Err(CoreError::new(ErrorCode::InvalidName, format!("{} is not a Markdown file", path.display())));
+    }
+    if let Some(root) = current_root.filter(|r| path.starts_with(r)) {
+        return Ok(OpenPlan { root: root.to_path_buf(), file: Some(path), switch: false });
+    }
+    let parent = path.parent().ok_or_else(|| CoreError::new(ErrorCode::NotFound, "file has no parent folder"))?.to_path_buf();
+    Ok(OpenPlan { root: parent, file: Some(path), switch: true })
+}
+
 /// Display name of a workspace: its folder name.
 pub fn workspace_name(root: &Path) -> String {
     root.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| path_string(root))

@@ -94,6 +94,24 @@ flowchart LR
   A -->
 \`\`\`
 `,
+  'Tables.md': `# Tables
+
+| Feature | Status | Owner | Notes |
+| --- | :---: | --- | --- |
+| Open with | done | goo | Files from any file manager open in goo, in their own folder or the one already open |
+| Reading width | done | goo | Narrow, medium, wide or full; also a slider |
+| File watching | planned | — | Reload notes that change on disk, ask when there are unsaved edits |
+| Export | idea | — | HTML and PDF |
+
+| Shortcut | Action | Shortcut | Action | Shortcut | Action |
+| --- | --- | --- | --- | --- | --- |
+| \`Ctrl+S\` | Save | \`Ctrl+N\` | New note | \`Ctrl+E\` | Edit / split / preview |
+| \`Ctrl+O\` | Open folder | \`Ctrl+W\` | Close tab | \`Ctrl+,\` | Settings |
+
+| Endpoint | Description |
+| --- | --- |
+| \`https://api.example.com/v1/projects/{projectId}/environments/{environmentId}/variables\` | A very long URL that cannot wrap nicely |
+`,
   'journal/2026-10-10.md': `# 10 October 2026
 
 Started **goo** today. Same idea as Slinger: small, fast, yours.

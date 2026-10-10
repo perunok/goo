@@ -17,6 +17,7 @@
   import Welcome from '../features/files/Welcome.svelte'
   import SettingsDialog from '../features/settings/SettingsDialog.svelte'
   import AboutDialog from '../features/about/AboutDialog.svelte'
+  import WidthControl from '../features/settings/WidthControl.svelte'
 
   const doc = $derived(workspace.active)
   const mode = $derived(settings.ui.viewMode)
@@ -64,13 +65,14 @@
           <IconButton icon="edit" label="Edit" active={mode === 'edit'} onclick={() => settings.setUi({ viewMode: 'edit' })} />
           <IconButton icon="split" label="Split" active={mode === 'split'} onclick={() => settings.setUi({ viewMode: 'split' })} />
           <IconButton icon="eye" label="Preview" active={mode === 'preview'} onclick={() => settings.setUi({ viewMode: 'preview' })} />
+          <WidthControl />
         </div>
       {/if}
       <IconButton icon="settings" label="Settings (Ctrl+,)" onclick={() => ui.open('settings')} />
       <IconButton icon="help" label="About goo" onclick={() => ui.open('about')} />
     </div>
 
-    <div class="content">
+    <div class="content" style:--reading-width={settings.ui.readingWidth ? `${settings.ui.readingWidth}px` : 'none'}>
       {#if !workspace.workspace}
         <Welcome />
       {:else if doc}
@@ -164,6 +166,11 @@
   }
   .panes.split > :global(:first-child) {
     border-right: 1px solid var(--border);
+  }
+  /* Edit-only: the text column gets the reading width too, centred. */
+  .panes.edit :global(.cm-content) {
+    max-width: var(--reading-width);
+    margin: 0 auto;
   }
   .nodoc {
     display: grid;

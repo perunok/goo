@@ -2,7 +2,7 @@
  * The open folder, its file tree and the open documents (tabs). All I/O goes through `backend`; failures become
  * toasts, never unhandled rejections.
  */
-import type { Tree, TreeNode, Workspace } from '../backend/types'
+import type { OpenEvent, OpenRequest, Tree, TreeNode, Workspace } from '../backend/types'
 import { errorMessage } from '../backend/types'
 import { basename, relativeTo, stem } from '../lib/paths'
 import { backend } from './backend'
@@ -47,8 +47,14 @@ class WorkspaceStore {
       () => this.dirtyCount > 0,
       async () => (await this.confirmDiscard(this.docs.filter(isDirty))) !== 'cancel',
     )
+    backend.onOpenRequest(
+      (e) => void this.handleOpenEvent(e),
+      (message) => ui.toast(message, 'error'),
+    )
     await this.loadRecents()
-    // Reopen where the user left off (only folders from the recent list are accepted by the backend).
+    // Started with a file or folder ("Open with goo", `goo notes.md`): that wins over the last session.
+    if (await this.takeOpenRequest()) return
+    // Otherwise reopen where the user left off (only folders from the recent list are accepted by the backend).
     const last = readLast()
     if (last && this.recents.some((r) => r.root === last.root)) {
       if (await this.openRecent(last.root, false)) {
@@ -58,6 +64,29 @@ class WorkspaceStore {
       }
     }
     this.persist()
+  }
+
+  /** A file or folder opened from outside while the app runs. */
+  private async handleOpenEvent(e: OpenEvent) {
+    if (e.switch && !(await this.confirmLeave())) {
+      await backend.dropOpenRequest().catch(() => {})
+      return
+    }
+    await this.takeOpenRequest()
+  }
+
+  private async takeOpenRequest(): Promise<boolean> {
+    let req: OpenRequest | null
+    try {
+      req = await backend.takeOpenRequest()
+    } catch (e) {
+      ui.toast(errorMessage(e), 'error')
+      return false
+    }
+    if (!req) return false
+    if (req.switched || this.workspace?.root !== req.workspace.root) await this.activate(req.workspace)
+    if (req.file) await this.openFile(req.file)
+    return true
   }
 
   async loadRecents() {

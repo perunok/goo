@@ -170,21 +170,32 @@
 .md-doc .tok-punct {
   color: var(--syn-punct);
 }
+/*
+ * Tables: as wide as their content needs, scrolling sideways when wider than the page. Text inside wraps only at
+ * word boundaries (`.md-doc` uses overflow-wrap: anywhere, which would let columns collapse to a letter or two).
+ */
 .md-doc table {
   display: block;
+  width: max-content;
   max-width: 100%;
   overflow: auto;
+  overflow-wrap: normal;
   border-collapse: collapse;
   font-size: 0.95em;
 }
 .md-doc :where(th, td) {
-  padding: 0.35em 0.75em;
+  padding: 0.4em 0.8em;
   border: 1px solid var(--border);
   text-align: left;
+  vertical-align: top;
 }
 .md-doc th {
   font-weight: 600;
+  white-space: nowrap;
   background: var(--surface-raised);
+}
+.md-doc :where(th, td) code {
+  white-space: nowrap;
 }
 .md-doc tbody tr:nth-child(2n) {
   background: color-mix(in srgb, var(--surface-raised) 50%, transparent);

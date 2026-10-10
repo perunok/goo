@@ -114,7 +114,7 @@
     background: var(--surface);
   }
   .page {
-    max-width: 820px;
+    max-width: var(--reading-width, 820px);
     margin: 0 auto;
     padding: 28px 32px 40vh;
   }

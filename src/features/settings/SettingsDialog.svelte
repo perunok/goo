@@ -1,6 +1,6 @@
 <script lang="ts">
   import Dialog from '../../components/ui/Dialog.svelte'
-  import { settings } from '../../app/settings.svelte'
+  import { READING_WIDTH_MAX, READING_WIDTH_MIN, settings } from '../../app/settings.svelte'
   import { ui } from '../../app/ui.svelte'
   import { FONT_SIZE_MAX, FONT_SIZE_MIN } from '../../lib/appearance'
   import { ACCENTS, THEMES, THEME_DEFAULT_ACCENT } from '../../lib/themes'
@@ -91,6 +91,23 @@
       Font size
       <input type="range" min={FONT_SIZE_MIN} max={FONT_SIZE_MAX} value={a.fontSize} oninput={(e) => settings.setAppearance({ fontSize: Number(e.currentTarget.value) })} />
       <span>{a.fontSize}px</span>
+    </label>
+    <label class="range">
+      Reading width
+      <input
+        type="range"
+        min={READING_WIDTH_MIN}
+        max={READING_WIDTH_MAX}
+        step="20"
+        disabled={settings.ui.readingWidth === 0}
+        value={settings.ui.readingWidth || 820}
+        oninput={(e) => settings.setUi({ readingWidth: Number(e.currentTarget.value) })}
+      />
+      <span>{settings.ui.readingWidth ? `${settings.ui.readingWidth}px` : 'Full'}</span>
+    </label>
+    <label class="check">
+      <input type="checkbox" checked={settings.ui.readingWidth === 0} onchange={(e) => settings.setUi({ readingWidth: e.currentTarget.checked ? 0 : 820 })} />
+      Use the full window width for text
     </label>
     <label class="check">
       <input type="checkbox" checked={settings.ui.wrap} onchange={(e) => settings.setUi({ wrap: e.currentTarget.checked })} />

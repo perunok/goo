@@ -99,7 +99,8 @@ describe('colours only come from themes.css', () => {
     '../../public/theme-init.js': read('../../public/theme-init.js'),
     '../components/markdown/markdown.css': read('../components/markdown/markdown.css'),
   } as Record<string, string>
-  const known = new Set<string>([...THEME_TOKENS, 'font-sans', 'font-mono', 'font-size', 'radius'])
+  // plus the non-colour layout variables (reading-width is set inline by App.svelte)
+  const known = new Set<string>([...THEME_TOKENS, 'font-sans', 'font-mono', 'font-size', 'radius', 'reading-width'])
 
   it('components, stores and stylesheets contain no literal colours', () => {
     expect(Object.keys(sources).length).toBeGreaterThan(30)
