@@ -53,6 +53,18 @@ export const tauriBackend: GooBackend = {
     invoke<CloudStatus>('cloud_link', 'workspaceId' in link ? { workspaceId: link.workspaceId, newName: null } : { workspaceId: null, newName: link.newName }),
   cloudUnlink: (root) => invoke<CloudStatus>('cloud_unlink', { root }),
   cloudSyncNow: (root) => invoke<void>('cloud_sync_now', { root: root ?? null }),
+  onUiQuery(handler) {
+    void listen<{ id: number; kind: string; args: unknown }>('ui-query', async (e) => {
+      const { id, kind, args } = e.payload
+      let answer: { ok: unknown } | { error: string }
+      try {
+        answer = { ok: await handler(kind, args) }
+      } catch (err) {
+        answer = { error: err instanceof Error ? err.message : String(err) }
+      }
+      void invoke('ui_answer', { id, answer }).catch(() => {})
+    })
+  },
 }
 
 export function inTauri(): boolean {

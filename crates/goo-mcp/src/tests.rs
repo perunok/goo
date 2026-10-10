@@ -10,6 +10,10 @@ use std::time::Duration;
 
 #[derive(Default)]
 struct FakeHost {
+    /// What the window would answer for get_open_note (None: window not available).
+    screen: Option<Value>,
+    /// Mermaid sources containing "broken" fail.
+    mermaid: bool,
     open: Option<PathBuf>,
     recents: Vec<PathBuf>,
     unsaved: Vec<PathBuf>,
@@ -36,6 +40,15 @@ impl Host for FakeHost {
     }
     fn activity(&self, tool: &str) {
         self.activity.lock().unwrap().push(tool.into());
+    }
+    fn open_note(&self) -> Result<Value, String> {
+        self.screen.clone().ok_or_else(|| "goo's window is not available".into())
+    }
+    fn check_mermaid(&self, sources: &[String]) -> Result<Vec<Option<String>>, String> {
+        if !self.mermaid {
+            return Err("goo's window is not available".into());
+        }
+        Ok(sources.iter().map(|s| s.contains("broken").then(|| "Parse error on line 2".to_string())).collect())
     }
 }
 
@@ -94,10 +107,17 @@ fn tools_are_listed_with_schemas_and_hints() {
     let list = protocol::tool_list();
     let tools = list["tools"].as_array().unwrap();
     let names: Vec<_> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
-    assert_eq!(names, ["list_workspaces", "list_notes", "read_note", "search_notes", "create_note", "write_note", "edit_note", "append_to_note", "open_in_app"]);
+    assert_eq!(
+        names,
+        [
+            "list_workspaces", "list_notes", "read_note", "search_notes", "create_note", "write_note", "edit_note", "append_to_note",
+            "open_in_app", "get_open_note", "check_mermaid", "sync_status", "sync_now"
+        ]
+    );
     for t in tools {
         assert_eq!(t["inputSchema"]["type"], "object", "{}", t["name"]);
-        assert_eq!(t["annotations"]["openWorldHint"], false);
+        // only sync_now reaches beyond this computer
+        assert_eq!(t["annotations"]["openWorldHint"], t["name"] == "sync_now", "{}", t["name"]);
     }
     let write = tools.iter().find(|t| t["name"] == "write_note").unwrap();
     assert_eq!(write["annotations"]["destructiveHint"], true);
@@ -398,4 +418,71 @@ fn settings_start_off_and_secrets_are_private() {
         assert_eq!(mode & 0o777, 0o600);
     }
     assert!(!files::read_launch(d.path()).enabled);
+}
+
+// ---------------------------------------------------------------------------
+// window-backed and goo cloud tools
+// ---------------------------------------------------------------------------
+
+#[test]
+fn mermaid_blocks_are_found_with_their_lines() {
+    let text = "# T\n\n```mermaid\nflowchart LR\n  A --> B\n```\n\n```js\nx\n```\n~~~~ Mermaid title\nbroken\n~~~~\n```mermaid\nnot closed\n";
+    let blocks = crate::tools::mermaid_blocks(text);
+    assert_eq!(blocks, vec![(3, "flowchart LR\n  A --> B\n".to_string()), (11, "broken\n".to_string())]);
+}
+
+#[test]
+fn check_mermaid_reports_each_diagram_of_a_note() {
+    let (_d, root) = workspace();
+    std::fs::write(root.join("d.md"), "x\n```mermaid\ngraph TD\n```\ntext\n```mermaid\nbroken\n```\n").unwrap();
+    let host = FakeHost { mermaid: true, ..host_for(&root) };
+    let (e, _, data) = call(&host, "check_mermaid", json!({"path": "d.md"}));
+    assert!(!e);
+    assert_eq!(data["all_ok"], false);
+    assert_eq!(data["diagrams"][0], json!({"line": 2, "ok": true, "error": null}));
+    assert_eq!(data["diagrams"][1]["line"], 6);
+    assert_eq!(data["diagrams"][1]["error"], "Parse error on line 2");
+    let (e, _, data) = call(&host, "check_mermaid", json!({"code": "graph TD; A-->B"}));
+    assert!(!e);
+    assert_eq!(data["all_ok"], true);
+    let (e, msg, _) = call(&host, "check_mermaid", json!({}));
+    assert!(e && msg.contains("either"), "{msg}");
+    // without the window: a clear error
+    let (e, msg, _) = call(&host_for(&root), "check_mermaid", json!({"code": "graph TD"}));
+    assert!(e && msg.contains("window"), "{msg}");
+}
+
+#[test]
+fn get_open_note_gives_the_screen_with_a_relative_path() {
+    let (_d, root) = workspace();
+    let screen = json!({"path": root.join("projects/plan.md").to_string_lossy(), "text": "# Plan\nunsaved", "dirty": true,
+                        "selection": {"text": "unsaved", "from_line": 2, "to_line": 2}});
+    let host = FakeHost { screen: Some(screen), ..host_for(&root) };
+    let (e, _, data) = call(&host, "get_open_note", json!({}));
+    assert!(!e);
+    assert_eq!(data["path"], "projects/plan.md");
+    assert_eq!(data["workspace"], "notes");
+    assert_eq!(data["dirty"], true);
+    assert_eq!(data["selection"]["text"], "unsaved");
+
+    let nothing = FakeHost { screen: Some(json!({"path": null})), ..host_for(&root) };
+    let (e, _, data) = call(&nothing, "get_open_note", json!({}));
+    assert!(!e);
+    assert_eq!(data["open"], false);
+
+    // a note outside the folders opened in goo is not handed out
+    let outside = FakeHost { screen: Some(json!({"path": "/etc/hosts.md", "text": "x"})), ..host_for(&root) };
+    let (e, _, _) = call(&outside, "get_open_note", json!({}));
+    assert!(e);
+}
+
+#[test]
+fn sync_tools_default_to_not_linked() {
+    let (_d, root) = workspace();
+    let host = host_for(&root);
+    let (e, _, data) = call(&host, "sync_status", json!({}));
+    assert!(!e);
+    assert_eq!(data["linked"], false);
+    let (e, msg, _) = call(&host, "sync_now", json!({}));
+    assert!(e && msg.contains("does not sync"), "{msg}");
 }

@@ -15,6 +15,8 @@ export interface Doc {
   savedText: string
   /** Fragment to scroll to once the preview shows this doc (from a link like `x.md#plans`). */
   pendingAnchor: string | null
+  /** The file changed outside goo while this note had unsaved edits (saving asks before overwriting). */
+  diskChanged: boolean
 }
 
 const LAST_KEY = 'goo.lastSession'
@@ -107,8 +109,9 @@ class WorkspaceStore {
   }
 
   /**
-   * An AI assistant created or changed notes on disk: refresh the tree, and reload open notes that have no unsaved
-   * edits (the backend refuses to write notes that do, so this is only a fallback message).
+   * Notes changed on disk outside the editor: another program (folder watching), an AI assistant (MCP) or goo cloud.
+   * The tree is refreshed; open notes without unsaved edits reload; notes with unsaved edits keep them and are marked,
+   * so saving asks before overwriting. goo's own saves come back here too and are recognised (same text).
    */
   private async handleFilesChanged(e: FilesChanged) {
     if (!this.workspace || e.root !== this.workspace.root) return
@@ -116,20 +119,29 @@ class WorkspaceStore {
     for (const path of e.files) {
       const d = this.docs.find((x) => x.path === path)
       if (!d) continue
-      if (isDirty(d)) {
-        ui.toast(`${d.name} changed on disk; your unsaved edits are kept.`)
-        continue
-      }
+      let text: string
       try {
-        const text = await backend.readFile(path)
-        d.text = text
-        d.savedText = text
+        text = await backend.readFile(path)
       } catch (err) {
         if (isBackendError(err) && err.code === 'not_found') {
-          // moved or deleted by sync: the tree shows where it went
-          ui.toast(`${d.name} was moved or deleted by sync.`)
-          await this.close(d.path)
+          if (isDirty(d)) {
+            d.diskChanged = true
+            ui.toast(`${d.name} was moved or deleted outside goo; your unsaved text is still here.`)
+          } else {
+            ui.toast(`${d.name} was moved or deleted outside goo.`)
+            await this.close(d.path)
+          }
         } else ui.toast(errorMessage(err), 'error')
+        continue
+      }
+      if (text === d.savedText) continue // our own save, or nothing new
+      if (!isDirty(d)) {
+        d.text = text
+        d.savedText = text
+        d.diskChanged = false
+      } else if (!d.diskChanged) {
+        d.diskChanged = true
+        ui.toast(`${d.name} changed outside goo. Your unsaved edits are kept; saving will ask before overwriting.`)
       }
     }
   }
@@ -232,7 +244,7 @@ class WorkspaceStore {
     }
     try {
       const text = await backend.readFile(path)
-      this.docs = [...this.docs, { path, name: basename(path), text, savedText: text, pendingAnchor: opts.anchor ?? null }]
+      this.docs = [...this.docs, { path, name: basename(path), text, savedText: text, pendingAnchor: opts.anchor ?? null, diskChanged: false }]
       if (opts.activate !== false) this.activePath = path
       this.persist()
       return true
@@ -251,10 +263,44 @@ class WorkspaceStore {
     const d = this.docs.find((x) => x.path === path)
     if (!d) return false
     if (!isDirty(d)) return true
+    if (d.diskChanged) {
+      const choice = await ui.confirm({
+        title: `${d.name} changed outside goo`,
+        message: 'Another program changed this note after you started editing. Keep your version (overwrite theirs), or load theirs and drop your edits?',
+        actions: [
+          { id: 'mine', label: 'Keep mine', kind: 'primary' },
+          { id: 'theirs', label: 'Load theirs', kind: 'danger' },
+          { id: 'cancel', label: 'Cancel' },
+        ],
+      })
+      if (choice === 'theirs') {
+        try {
+          const disk = await backend.readFile(d.path)
+          d.text = disk
+          d.savedText = disk
+          d.diskChanged = false
+        } catch (e) {
+          ui.toast(errorMessage(e), 'error')
+        }
+        return false
+      }
+      if (choice !== 'mine') return false
+    }
     const text = d.text
     try {
-      await backend.writeFile(d.path, text)
+      try {
+        await backend.writeFile(d.path, text)
+      } catch (e) {
+        // the file is gone (moved/deleted outside goo): recreate it from the editor
+        if (!(isBackendError(e) && e.code === 'not_found' && d.diskChanged && this.workspace)) throw e
+        const rel = relativeTo(this.workspace.root, d.path)
+        const dir = d.path.slice(0, d.path.length - basename(d.path).length - 1) || this.workspace.root
+        await backend.createFile(dir, basename(d.path), text).catch(() => {
+          throw new Error(`${rel} could not be recreated`)
+        })
+      }
       d.savedText = text
+      d.diskChanged = false
       this.onSaved?.()
       return true
     } catch (e) {

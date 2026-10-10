@@ -9,6 +9,7 @@ use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::{Arc, Mutex, RwLock};
+use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager, State};
 
 pub struct Mcp {
@@ -39,6 +40,8 @@ impl Host for AppHost {
     fn changed(&self, root: &Path, files: &[PathBuf]) {
         let files: Vec<String> = files.iter().map(|f| f.to_string_lossy().into_owned()).collect();
         let _ = self.0.emit("files-changed", json!({ "root": root.to_string_lossy(), "files": files }));
+        // a synced folder sends assistant edits to goo cloud right away
+        self.0.state::<crate::cloud::Cloud>().trigger(Some(root.to_string_lossy().into_owned()));
     }
 
     fn open_in_app(&self, files: Vec<PathBuf>) {
@@ -47,6 +50,24 @@ impl Host for AppHost {
 
     fn activity(&self, tool: &str) {
         let _ = self.0.emit("mcp-activity", tool);
+    }
+
+    fn open_note(&self) -> Result<Value, String> {
+        crate::uibridge::ask(&self.0, "open_note", Value::Null, Duration::from_secs(5))
+    }
+
+    fn check_mermaid(&self, sources: &[String]) -> Result<Vec<Option<String>>, String> {
+        let answer = crate::uibridge::ask(&self.0, "check_mermaid", json!({ "sources": sources }), Duration::from_secs(30))?;
+        let list = answer.as_array().ok_or("unexpected answer from the window")?;
+        Ok(list.iter().map(|v| v.as_str().map(String::from)).collect())
+    }
+
+    fn sync_status(&self, root: &Path) -> Result<Value, String> {
+        Ok(self.0.state::<crate::cloud::Cloud>().folder_json(root))
+    }
+
+    fn sync_now(&self, root: &Path) -> Result<Value, String> {
+        self.0.state::<crate::cloud::Cloud>().sync_and_wait(root, Duration::from_secs(90))
     }
 }
 

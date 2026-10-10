@@ -74,6 +74,8 @@ export interface McpStatus {
 export interface FilesChanged {
   root: string
   files: string[]
+  /** Folders changed too (from folder watching): refresh the tree. */
+  tree?: boolean
 }
 
 /** goo cloud (src-tauri/src/cloud.rs). */
@@ -158,6 +160,8 @@ export interface GooBackend {
   cloudUnlink(root: string): Promise<CloudStatus>
   /** Sync soon (after a save: that folder; no root: every linked folder). */
   cloudSyncNow(root?: string): Promise<void>
+  /** Questions from the Rust side for AI assistants (src-tauri/src/uibridge.rs); the handler's result is the answer. */
+  onUiQuery(handler: (kind: string, args: unknown) => Promise<unknown>): void
 }
 
 export function isBackendError(e: unknown): e is BackendError {
