@@ -1,10 +1,11 @@
 <script lang="ts">
   import Dialog from '../../components/ui/Dialog.svelte'
   import { READING_WIDTH_MAX, READING_WIDTH_MIN, settings } from '../../app/settings.svelte'
-  import { ui } from '../../app/ui.svelte'
+  import { SETTINGS_TABS, ui } from '../../app/ui.svelte'
   import { FONT_SIZE_MAX, FONT_SIZE_MIN } from '../../lib/appearance'
   import { ACCENTS, THEMES, THEME_DEFAULT_ACCENT } from '../../lib/themes'
   import McpSettings from './McpSettings.svelte'
+  import CloudSettings from '../cloud/CloudSettings.svelte'
 
   const light = THEMES.filter((t) => t.scheme === 'light')
   const dark = THEMES.filter((t) => t.scheme === 'dark')
@@ -30,6 +31,13 @@
 {/snippet}
 
 <Dialog title="Settings" onClose={() => ui.close()} width="760px">
+  <div class="tabs" role="tablist">
+    {#each SETTINGS_TABS as t (t.id)}
+      <button type="button" role="tab" aria-selected={ui.settingsTab === t.id} class:active={ui.settingsTab === t.id} onclick={() => (ui.settingsTab = t.id)}>{t.label}</button>
+    {/each}
+  </div>
+  <div class="tab-body">
+  {#if ui.settingsTab === 'appearance'}
   <section>
     <h3>Theme</h3>
     <label class="check">
@@ -115,11 +123,40 @@
       Wrap long lines in the editor
     </label>
   </section>
-
-  <McpSettings />
+  {:else if ui.settingsTab === 'cloud'}
+    <CloudSettings />
+  {:else}
+    <McpSettings />
+  {/if}
+  </div>
 </Dialog>
 
 <style>
+  /* the dialog keeps its height when switching tabs */
+  .tab-body {
+    min-height: min(440px, calc(100vh - 220px));
+  }
+  .tabs {
+    display: flex;
+    gap: 2px;
+    margin: 0 0 14px;
+    border-bottom: 1px solid var(--border);
+  }
+  .tabs button {
+    padding: 6px 12px;
+    border: 0;
+    background: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    box-shadow: inset 0 -2px 0 transparent;
+  }
+  .tabs button:hover {
+    color: var(--text);
+  }
+  .tabs button.active {
+    color: var(--text);
+    box-shadow: inset 0 -2px 0 var(--accent);
+  }
   section + section {
     margin-top: 18px;
   }

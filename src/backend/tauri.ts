@@ -1,7 +1,7 @@
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { getCurrentWindow } from '@tauri-apps/api/window'
-import type { FilesChanged, GooBackend, McpStatus, OpenEvent, OpenRequest, Tree, Workspace } from './types'
+import type { CloudStatus, CloudWorkspace, FilesChanged, GooBackend, McpStatus, OpenEvent, OpenRequest, Tree, Workspace } from './types'
 
 /** The Rust side (src-tauri/src/lib.rs); argument names match the command parameters. */
 export const tauriBackend: GooBackend = {
@@ -40,6 +40,19 @@ export const tauriBackend: GooBackend = {
   mcpNewToken: () => invoke<McpStatus>('mcp_new_token'),
   mcpConnectClaudeCode: () => invoke<McpStatus>('mcp_connect_claude_code'),
   mcpDisconnectClaudeCode: () => invoke<McpStatus>('mcp_disconnect_claude_code'),
+  cloudStatus: () => invoke<CloudStatus>('cloud_status'),
+  onCloudStatus(handler) {
+    void listen<CloudStatus>('cloud-status', (e) => handler(e.payload))
+  },
+  cloudSetUtcOffset: (minutes) => invoke<void>('cloud_set_utc_offset', { minutes }),
+  cloudSignIn: (serverUrl) => invoke<CloudStatus>('cloud_sign_in', { serverUrl }),
+  cloudCancelSignIn: () => invoke<CloudStatus>('cloud_cancel_sign_in'),
+  cloudSignOut: () => invoke<CloudStatus>('cloud_sign_out'),
+  cloudWorkspaces: () => invoke<CloudWorkspace[]>('cloud_workspaces'),
+  cloudLink: (link) =>
+    invoke<CloudStatus>('cloud_link', 'workspaceId' in link ? { workspaceId: link.workspaceId, newName: null } : { workspaceId: null, newName: link.newName }),
+  cloudUnlink: (root) => invoke<CloudStatus>('cloud_unlink', { root }),
+  cloudSyncNow: (root) => invoke<void>('cloud_sync_now', { root: root ?? null }),
 }
 
 export function inTauri(): boolean {

@@ -3,7 +3,7 @@
  * behaviour where it matters to the UI: paths must be inside the open folder, names get ".md", no overwrites.
  */
 import { SEED_FILES, SEED_ROOT } from './seed'
-import type { BackendError, ErrorCode, GooBackend, McpStatus, Tree, TreeNode, Workspace } from './types'
+import type { BackendError, CloudStatus, ErrorCode, GooBackend, McpStatus, Tree, TreeNode, Workspace } from './types'
 
 const fail = (code: ErrorCode, message: string): never => {
   throw { code, message } satisfies BackendError
@@ -31,6 +31,18 @@ export function createMockBackend(opts: { latencyMs?: number; files?: Record<str
     devBuild: true,
     claudeCode: { found: false, connected: 'no' },
   }
+  // goo cloud: a pretend server, so the settings UI can be tried in the browser.
+  let cloud: CloudStatus = { account: null, signIn: null, signInError: null, links: [] }
+  const cloudListeners: ((s: CloudStatus) => void)[] = []
+  const cloudChanged = () => {
+    cloud = structuredClone(cloud)
+    for (const l of cloudListeners) l(cloud)
+    return cloud
+  }
+  const cloudWorkspaces = [
+    { id: 'ws-team', name: 'Team notes', role: 'editor' },
+    { id: 'ws-read', name: 'Handbook', role: 'viewer' },
+  ]
   const mcpNow = () => ({ ...mcp, url: mcp.running ? `http://127.0.0.1:${mcp.port}/mcp` : null })
   const wait = () => new Promise((r) => setTimeout(r, opts.latencyMs ?? 0))
 
@@ -146,6 +158,58 @@ export function createMockBackend(opts: { latencyMs?: number; files?: Record<str
     },
     async mcpDisconnectClaudeCode() {
       return mcpNow()
+    },
+    async cloudStatus() {
+      return cloud
+    },
+    onCloudStatus(handler) {
+      cloudListeners.push(handler)
+    },
+    async cloudSetUtcOffset() {},
+    async cloudSignIn(serverUrl) {
+      if (!/^https:\/\/./.test(serverUrl)) fail('invalid_name', 'Enter the server address, starting with https://')
+      cloud.signIn = { serverUrl, userCode: 'GOO-4821', verificationUri: `${serverUrl}/device`, verificationUriComplete: `${serverUrl}/device?user_code=GOO-4821` }
+      cloud.signInError = null
+      setTimeout(() => {
+        if (!cloud.signIn) return
+        cloud.signIn = null
+        cloud.account = { serverUrl, email: 'you@example.com', displayName: 'You' }
+        cloudChanged()
+      }, 2500)
+      return cloudChanged()
+    },
+    async cloudCancelSignIn() {
+      cloud.signIn = null
+      return cloudChanged()
+    },
+    async cloudSignOut() {
+      cloud = { account: null, signIn: null, signInError: null, links: [] }
+      return cloudChanged()
+    },
+    async cloudWorkspaces() {
+      await wait()
+      return cloudWorkspaces
+    },
+    async cloudLink(link) {
+      if (!open) fail('no_workspace', 'Open a folder first.')
+      const ws = 'workspaceId' in link ? cloudWorkspaces.find((w) => w.id === link.workspaceId)! : { id: `ws-${Date.now()}`, name: link.newName, role: 'owner' }
+      cloud.links = cloud.links.filter((l) => l.root !== open!.root)
+      cloud.links.push({
+        root: open!.root,
+        workspaceId: ws.id,
+        workspaceName: ws.name,
+        role: ws.role,
+        status: { state: 'idle', lastSyncedAt: Math.floor(Date.now() / 1000), message: null, conflicts: [], quarantined: [], deferred: [], notUploaded: [] },
+      })
+      return cloudChanged()
+    },
+    async cloudUnlink(root) {
+      cloud.links = cloud.links.filter((l) => l.root !== root)
+      return cloudChanged()
+    },
+    async cloudSyncNow() {
+      for (const l of cloud.links) l.status = { ...l.status, state: 'idle', lastSyncedAt: Math.floor(Date.now() / 1000) }
+      cloudChanged()
     },
   }
 }

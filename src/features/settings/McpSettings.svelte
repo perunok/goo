@@ -104,9 +104,6 @@
 </section>
 
 <style>
-  section {
-    margin-top: 18px;
-  }
   h3 {
     margin: 0 0 6px;
     font-size: 0.95em;

@@ -76,6 +76,39 @@ export interface FilesChanged {
   files: string[]
 }
 
+/** goo cloud (src-tauri/src/cloud.rs). */
+export interface CloudFolderStatus {
+  state: 'idle' | 'syncing' | 'offline' | 'error' | 'signed_out'
+  lastSyncedAt: number | null
+  message: string | null
+  conflicts: { path: string; conflict_path: string }[]
+  quarantined: { path: string; reason: string; message: string }[]
+  deferred: string[]
+  notUploaded: string[]
+}
+
+export interface CloudLink {
+  root: string
+  workspaceId: string
+  workspaceName: string
+  role: 'owner' | 'admin' | 'editor' | 'viewer' | string
+  status: CloudFolderStatus
+}
+
+export interface CloudStatus {
+  account: { serverUrl: string; email: string; displayName: string } | null
+  /** A device sign-in waiting for approval in the browser. */
+  signIn: { serverUrl: string; userCode: string; verificationUri: string; verificationUriComplete: string } | null
+  signInError: string | null
+  links: CloudLink[]
+}
+
+export interface CloudWorkspace {
+  id: string
+  name: string
+  role: string
+}
+
 export interface GooBackend {
   readonly kind: 'tauri' | 'mock'
   /** Native folder picker; null when cancelled. */
@@ -113,6 +146,18 @@ export interface GooBackend {
   mcpNewToken(): Promise<McpStatus>
   mcpConnectClaudeCode(): Promise<McpStatus>
   mcpDisconnectClaudeCode(): Promise<McpStatus>
+  cloudStatus(): Promise<CloudStatus>
+  onCloudStatus(handler: (s: CloudStatus) => void): void
+  cloudSetUtcOffset(minutes: number): Promise<void>
+  cloudSignIn(serverUrl: string): Promise<CloudStatus>
+  cloudCancelSignIn(): Promise<CloudStatus>
+  cloudSignOut(): Promise<CloudStatus>
+  cloudWorkspaces(): Promise<CloudWorkspace[]>
+  /** Links the open folder to an existing workspace, or to a new one called `newName`. */
+  cloudLink(link: { workspaceId: string } | { newName: string }): Promise<CloudStatus>
+  cloudUnlink(root: string): Promise<CloudStatus>
+  /** Sync soon (after a save: that folder; no root: every linked folder). */
+  cloudSyncNow(root?: string): Promise<void>
 }
 
 export function isBackendError(e: unknown): e is BackendError {

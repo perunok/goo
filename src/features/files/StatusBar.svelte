@@ -4,6 +4,11 @@
   import { ui } from '../../app/ui.svelte'
   import { relativeTo } from '../../lib/paths'
   import { findTheme } from '../../lib/themes'
+  import { ago, cloud } from '../cloud/cloud.svelte'
+
+  const CLOUD_LABEL: Record<string, string> = { idle: 'Synced', syncing: 'Syncing…', offline: 'Offline', error: 'Sync problem', signed_out: 'Signed out' }
+  const sync = $derived(cloud.current)
+  const syncIssues = $derived(sync ? sync.status.conflicts.length + sync.status.quarantined.length : 0)
 
   const doc = $derived(workspace.active)
   // Counted on a short delay so very long notes do not slow typing down.
@@ -29,7 +34,18 @@
     <span>{counts.chars.toLocaleString()} chars</span>
     <span class:unsaved={isDirty(doc)}>{isDirty(doc) ? 'Unsaved' : 'Saved'}</span>
   {/if}
-  <button type="button" class="theme" onclick={() => ui.open('settings')} title="Themes and accents (Ctrl+,)">
+  {#if sync}
+    <button
+      type="button"
+      class="cloud {sync.status.state}"
+      class:warn={syncIssues > 0}
+      onclick={() => ui.open('settings', 'cloud')}
+      title={`goo cloud: ${sync.workspaceName}. Last synced ${ago(sync.status.lastSyncedAt)}.${sync.status.message ? ' ' + sync.status.message : ''}`}
+    >
+      {syncIssues ? `${syncIssues} to check` : (CLOUD_LABEL[sync.status.state] ?? sync.status.state)}
+    </button>
+  {/if}
+  <button type="button" class="theme" onclick={() => ui.open('settings', 'appearance')} title="Themes and accents (Ctrl+,)">
     <span class="swatch"></span>{findTheme(settings.resolvedTheme)?.label ?? settings.resolvedTheme}
   </button>
 </footer>
@@ -59,6 +75,21 @@
   .assistant {
     color: var(--accent-text);
     white-space: nowrap;
+  }
+  .cloud {
+    padding: 0 4px;
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+  }
+  .cloud.syncing {
+    color: var(--accent-text);
+  }
+  .cloud.error,
+  .cloud.warn {
+    color: var(--warning);
   }
   .theme {
     display: inline-flex;

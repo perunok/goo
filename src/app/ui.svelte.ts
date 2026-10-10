@@ -1,6 +1,13 @@
 /** Which dialog is open, plus toasts. One place, so any part of the app can open any dialog. */
 export type DialogName = 'settings' | 'about' | null
 
+export type SettingsTab = 'appearance' | 'cloud' | 'assistants'
+export const SETTINGS_TABS: { id: SettingsTab; label: string }[] = [
+  { id: 'appearance', label: 'Appearance' },
+  { id: 'cloud', label: 'goo cloud' },
+  { id: 'assistants', label: 'AI assistants' },
+]
+
 export interface Toast {
   id: number
   kind: 'error' | 'info'
@@ -25,6 +32,7 @@ export interface PromptRequest {
 
 class Ui {
   dialog = $state<DialogName>(null)
+  settingsTab = $state<SettingsTab>('appearance')
   toasts = $state<Toast[]>([])
   confirmRequest = $state<ConfirmRequest | null>(null)
   /** The MCP tool an AI assistant is running (shown in the status bar for a moment). */
@@ -33,7 +41,8 @@ class Ui {
   promptRequest = $state<PromptRequest | null>(null)
   private nextId = 1
 
-  open(d: Exclude<DialogName, null>) {
+  open(d: Exclude<DialogName, null>, tab?: SettingsTab) {
+    if (tab) this.settingsTab = tab
     this.dialog = d
   }
 

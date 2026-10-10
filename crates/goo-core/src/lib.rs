@@ -16,7 +16,8 @@ pub const MAX_TREE_ENTRIES: usize = 20_000;
 pub const MAX_RECENTS: usize = 12;
 
 const MARKDOWN_EXTENSIONS: &[&str] = &["md", "markdown", "mdown", "mkd"];
-const SKIPPED_DIRS: &[&str] = &["node_modules", "target", "dist", "build", "__pycache__"];
+/// Folders the tree leaves out (with hidden entries). Public so sync can refuse remote paths the tree would not show.
+pub const SKIPPED_DIRS: &[&str] = &["node_modules", "target", "dist", "build", "__pycache__"];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -98,7 +99,7 @@ pub fn is_markdown(path: &Path) -> bool {
         .unwrap_or(false)
 }
 
-fn is_hidden(name: &str) -> bool {
+pub fn is_hidden(name: &str) -> bool {
     name.starts_with('.')
 }
 
