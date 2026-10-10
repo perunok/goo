@@ -93,7 +93,9 @@ npm run test:rust     # goo-core and goo-mcp: files, path guarding, search, MCP 
 ## Releases
 
 Installers are built by GitHub Actions ([`.github/workflows/release.yml`](.github/workflows/release.yml)) for
-Linux (x64 + arm64: AppImage, deb, rpm), macOS (Apple silicon + Intel: dmg) and Windows (x64: setup exe, msi).
+Linux (x64 + arm64: AppImage, deb, rpm), macOS (Apple silicon + Intel: dmg) and Windows (x64: exe, msi), named like
+Slinger's: `goo-0.2.0-linux-amd64.deb`, `goo-0.2.0-mac-arm64.dmg`, `goo-0.2.0-win-x64.exe`
+([`scripts/release-assets.mjs`](scripts/release-assets.mjs)).
 
 ```bash
 npm version 0.2.0 --no-git-tag-version   # bump package.json (Cargo/Tauri read it from there)
