@@ -10,7 +10,7 @@ npm run dev            # UI only, browser, in-memory mock backend (src/backend/m
 npm run app:dev        # real desktop app (needs the Tauri Linux prerequisites, see README)
 npm run typecheck      # svelte-check
 npm test               # vitest (jsdom): src/**/*.test.ts
-npm run test:rust      # cargo test -p goo-core -p goo-mcp
+npm run test:rust      # cargo test -p goo-core -p goo-mcp -p goo-sync
 npm run app:build      # installers
 ```
 
@@ -28,6 +28,17 @@ npm run app:build      # installers
   endpoint.json / launch.json in `<config>/mcp/`, 0600). `src-tauri/src/mcp.rs` implements `Host` and the settings
   commands; the UI reports unsaved notes (`set_unsaved`) and reloads on `files-changed`. Same design as Slinger's
   `electron/mcp/`. The bridge must not pool HTTP connections (a stopped endpoint would hang it).
+- `crates/goo-sync`: goo cloud sync engine (no Tauri; not wired into the app yet). `api.rs` (wire types, `Remote`
+  trait), `http.rs` (`HttpRemote`, ureq + rustls; `TokenStore` = keychain, single-flight refresh, persist before use;
+  `DeviceSignIn`), `state.rs` (`<state_dir>/state.json` + `base/<note_id>`, never in the notes folder), `scan.rs`
+  (changes derived from files vs. base, rename = same hash), `merge.rs` (diffy 3-way), `engine.rs` (`sync()`: pull,
+  push, up to 4 rounds; conflict copies, `may_write` defers notes with unsaved edits). Tests use an in-process fake of
+  the server (`src/tests/fake.rs`); `tests/real_server.rs` runs against goo-cloud when `GOO_SYNC_IT_SERVER_DIR` is set.
+- goo cloud (desktop side): `crates/goo-sync` is the engine (spec: goo-cloud `docs/DESIGN.md` §4); `src-tauri/src/cloud.rs`
+  holds the account (`<config>/cloud/account.json`, tokens in the OS keychain via `keyring` 3), folder links
+  (`links.json`), per-workspace state dirs, and one scheduler thread (60 s, sooner after a save / Sync now, backoff).
+  It emits `cloud-status` and `files-changed`. UI: `src/features/cloud/` (store, Settings tab, status bar). Real-server
+  test: `GOO_SYNC_IT_SERVER_DIR=../goo-cloud/server cargo test -p goo-sync --test real_server`.
 - UI talks to the outside only through `GooBackend` (`src/backend/types.ts`). Adding a command touches:
   goo-core (+ test) -> `src-tauri/src/lib.rs` (+ `generate_handler!`) -> `types.ts` -> `tauri.ts` -> `mock.ts`.
   Window-level JS APIs need a permission in `src-tauri/capabilities/default.json`.

@@ -26,6 +26,9 @@ Plain Markdown, your folders, your colours: read [the Goo Manifesto](#manifesto)
   links open in your browser.
 - **AI assistants (MCP)**: turn on Settings > AI assistants and Claude (Code or Desktop), Cursor, VS Code and other
   MCP clients can list, read, search, create and edit your notes, and show a note in goo. See [AI assistants](#ai-assistants-mcp).
+- **goo cloud** (optional, self-hosted [goo-cloud](https://github.com/perunok/goo-cloud) server): sync a folder
+  between your computers and share it, with line-by-line merging of edits made on two devices and conflict copies
+  instead of lost text. Settings > goo cloud.
 - **Safe by default**: rendered notes are sanitised (no scripts, no event handlers, no remote content), Mermaid runs
   in `strict` mode, and the Rust side refuses any file path outside the folder you opened.
 
@@ -67,7 +70,7 @@ Requirements: Node.js 20+, Rust (stable), and the [Tauri prerequisites](https://
 for your OS. On Debian/Ubuntu:
 
 ```bash
-sudo apt install libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
+sudo apt install libwebkit2gtk-4.1-dev libdbus-1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
 ```
 
 Then:
@@ -116,6 +119,7 @@ src/                 Svelte 5 UI (TypeScript)
 src-tauri/           the Tauri shell: window, plugins and the commands the UI calls
 crates/goo-core/     file logic in plain Rust (no Tauri), unit-tested on its own
 crates/goo-mcp/      MCP server: note tools, localhost endpoint, `goo --mcp-stdio` bridge (no Tauri)
+crates/goo-sync/     goo cloud sync engine: scan, 3-way merge, pull/push, device sign-in (no Tauri)
 ```
 
 - The UI never touches the disk itself; it calls a handful of commands (`list_tree`, `read_file`, `write_file`,

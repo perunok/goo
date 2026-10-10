@@ -6,6 +6,7 @@
 //! handed over by the single-instance plugin) stores the path as a pending request and tells the UI with an
 //! `open-request` event; the UI asks about unsaved changes if needed, then claims it with `take_open_request`.
 
+mod cloud;
 mod mcp;
 
 use goo_core::{CoreError, ErrorCode, Recents, Tree};
@@ -254,6 +255,8 @@ pub fn run() {
             let mcp = mcp::Mcp::new(&config);
             mcp.apply(app.handle());
             app.manage(mcp);
+            app.manage(cloud::Cloud::new(&config));
+            cloud::Cloud::start(app.handle());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -274,6 +277,15 @@ pub fn run() {
             mcp::mcp_connect_claude_code,
             mcp::mcp_disconnect_claude_code,
             mcp::set_unsaved,
+            cloud::cloud_status,
+            cloud::cloud_set_utc_offset,
+            cloud::cloud_sign_in,
+            cloud::cloud_cancel_sign_in,
+            cloud::cloud_sign_out,
+            cloud::cloud_workspaces,
+            cloud::cloud_link,
+            cloud::cloud_unlink,
+            cloud::cloud_sync_now,
         ])
         .build(tauri::generate_context!())
         .expect("error while building goo")

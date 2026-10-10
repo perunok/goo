@@ -3,7 +3,7 @@
  * toasts, never unhandled rejections.
  */
 import type { FilesChanged, OpenEvent, OpenRequest, Tree, TreeNode, Workspace } from '../backend/types'
-import { errorMessage } from '../backend/types'
+import { errorMessage, isBackendError } from '../backend/types'
 import { basename, relativeTo, stem } from '../lib/paths'
 import { backend } from './backend'
 import { ui } from './ui.svelte'
@@ -40,6 +40,8 @@ class WorkspaceStore {
   loading = $state(false)
   /** The native folder picker is open (one at a time). */
   picking = false
+  /** Called after every successful save (goo cloud syncs soon after). */
+  onSaved: (() => void) | null = null
 
   active = $derived(this.docs.find((d) => d.path === this.activePath) ?? null)
   dirtyCount = $derived(this.docs.filter(isDirty).length)
@@ -123,7 +125,11 @@ class WorkspaceStore {
         d.text = text
         d.savedText = text
       } catch (err) {
-        ui.toast(errorMessage(err), 'error')
+        if (isBackendError(err) && err.code === 'not_found') {
+          // moved or deleted by sync: the tree shows where it went
+          ui.toast(`${d.name} was moved or deleted by sync.`)
+          await this.close(d.path)
+        } else ui.toast(errorMessage(err), 'error')
       }
     }
   }
@@ -249,6 +255,7 @@ class WorkspaceStore {
     try {
       await backend.writeFile(d.path, text)
       d.savedText = text
+      this.onSaved?.()
       return true
     } catch (e) {
       ui.toast(`Could not save ${d.name}: ${errorMessage(e)}`, 'error')
