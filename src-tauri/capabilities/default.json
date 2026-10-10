@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "What the goo window may do. File access is not here on purpose: it goes through goo's own commands (src/lib.rs), which keep every path inside the open folder.",
+  "windows": ["main"],
+  "permissions": ["core:default", "core:window:allow-set-title", "core:window:allow-destroy"]
+}
