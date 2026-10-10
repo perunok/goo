@@ -286,14 +286,19 @@ impl Recents {
 // Opening from outside ("Open with" in a file manager, `goo notes.md`, macOS open events)
 // ---------------------------------------------------------------------------
 
-/// The path to open from a command line (`argv[0]` is the program). Flags are skipped, `file://` URIs (what some file
-/// managers pass) are decoded, relative paths are resolved against `cwd`. The first argument that exists wins.
-pub fn launch_path(args: &[String], cwd: &Path) -> Option<PathBuf> {
-    args.iter().skip(1).filter(|a| !a.starts_with('-')).find_map(|a| {
-        let p = file_uri_to_path(a).unwrap_or_else(|| PathBuf::from(a));
-        let p = if p.is_absolute() { p } else { cwd.join(p) };
-        p.exists().then_some(p)
-    })
+/// The paths to open from a command line (`argv[0]` is the program): several when a file manager opens a selection
+/// ("Open with" passes them all). Flags are skipped, `file://` URIs (what some file managers pass) are decoded,
+/// relative paths are resolved against `cwd`, and paths that do not exist are dropped.
+pub fn launch_paths(args: &[String], cwd: &Path) -> Vec<PathBuf> {
+    args.iter()
+        .skip(1)
+        .filter(|a| !a.starts_with('-'))
+        .filter_map(|a| {
+            let p = file_uri_to_path(a).unwrap_or_else(|| PathBuf::from(a));
+            let p = if p.is_absolute() { p } else { cwd.join(p) };
+            p.exists().then_some(p)
+        })
+        .collect()
 }
 
 /// `file:///home/a/My%20Notes.md` -> `/home/a/My Notes.md`. None for anything that is not a local file URI.
@@ -328,33 +333,54 @@ pub fn file_uri_to_path(uri: &str) -> Option<PathBuf> {
     Some(PathBuf::from(decoded))
 }
 
-/// What opening `path` from outside means for the app.
+/// What opening paths from outside means for the app.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OpenPlan {
     /// The folder to show (canonical).
     pub root: PathBuf,
-    /// The note to open in it, if a file was given.
-    pub file: Option<PathBuf>,
+    /// The notes to open in it (none when a folder was opened).
+    pub files: Vec<PathBuf>,
+    /// Paths left out: not Markdown, or outside `root` (a selection spread over several folders).
+    pub skipped: Vec<PathBuf>,
     /// False when `root` is the folder already open (no switch, no "unsaved changes" question needed).
     pub switch: bool,
 }
 
-/// A folder opens as the workspace. A note opens in the current workspace when it lies inside it, otherwise its own
-/// folder becomes the workspace.
-pub fn plan_open(current_root: Option<&Path>, path: &Path) -> Result<OpenPlan> {
-    let path = fs::canonicalize(path)?;
-    if path.is_dir() {
-        let switch = current_root != Some(path.as_path());
-        return Ok(OpenPlan { root: path, file: None, switch });
+/// The first path decides the folder: a folder opens as the workspace; a note opens in the current workspace when it
+/// lies inside it, otherwise its own folder becomes the workspace. The other paths join as notes when they are
+/// Markdown files inside that folder.
+pub fn plan_open(current_root: Option<&Path>, paths: &[PathBuf]) -> Result<OpenPlan> {
+    let mut canon = Vec::new();
+    let mut skipped = Vec::new();
+    for p in paths {
+        match fs::canonicalize(p) {
+            Ok(c) if c.is_dir() || is_markdown(&c) => canon.push(c),
+            _ => skipped.push(p.clone()),
+        }
     }
-    if !is_markdown(&path) {
-        return Err(CoreError::new(ErrorCode::InvalidName, format!("{} is not a Markdown file", path.display())));
+    let Some(first) = canon.first().cloned() else {
+        let what = paths.first().map(|p| p.display().to_string()).unwrap_or_default();
+        return Err(CoreError::new(ErrorCode::InvalidName, format!("{what} is not a Markdown file or a folder")));
+    };
+    let root = if first.is_dir() {
+        first.clone()
+    } else if let Some(r) = current_root.filter(|r| first.starts_with(r)) {
+        r.to_path_buf()
+    } else {
+        first.parent().ok_or_else(|| CoreError::new(ErrorCode::NotFound, "file has no parent folder"))?.to_path_buf()
+    };
+    let mut files = Vec::new();
+    for c in canon {
+        if c.is_file() && c.starts_with(&root) {
+            if !files.contains(&c) {
+                files.push(c);
+            }
+        } else if c != root {
+            skipped.push(c);
+        }
     }
-    if let Some(root) = current_root.filter(|r| path.starts_with(r)) {
-        return Ok(OpenPlan { root: root.to_path_buf(), file: Some(path), switch: false });
-    }
-    let parent = path.parent().ok_or_else(|| CoreError::new(ErrorCode::NotFound, "file has no parent folder"))?.to_path_buf();
-    Ok(OpenPlan { root: parent, file: Some(path), switch: true })
+    let switch = current_root != Some(root.as_path());
+    Ok(OpenPlan { root, files, skipped, switch })
 }
 
 /// Display name of a workspace: its folder name.

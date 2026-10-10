@@ -131,18 +131,19 @@ fn recents_are_most_recent_first_unique_and_capped() {
 }
 
 #[test]
-fn launch_path_takes_the_first_existing_argument() {
+fn launch_paths_keeps_every_existing_argument() {
     let (_d, root) = ws();
     touch(&root.join("My Notes/a b.md"), "");
+    touch(&root.join("My Notes/c.md"), "");
     let args = |v: &[&str]| v.iter().map(|s| s.to_string()).collect::<Vec<_>>();
-    // relative to cwd, flags skipped, missing files skipped
-    let got = launch_path(&args(&["goo", "--verbose", "missing.md", "My Notes/a b.md"]), &root).unwrap();
-    assert_eq!(got, root.join("My Notes/a b.md"));
+    // relative to cwd, flags skipped, missing files skipped, order kept
+    let got = launch_paths(&args(&["goo", "--verbose", "missing.md", "My Notes/a b.md", "My Notes/c.md"]), &root);
+    assert_eq!(got, [root.join("My Notes/a b.md"), root.join("My Notes/c.md")]);
     // file:// URIs from file managers
     let uri = format!("file://{}/My%20Notes/a%20b.md", root.display());
-    assert_eq!(launch_path(&args(&["goo", &uri]), Path::new("/")).unwrap(), root.join("My Notes/a b.md"));
-    assert!(launch_path(&args(&["goo"]), &root).is_none());
-    assert!(launch_path(&args(&["goo", "nope.md"]), &root).is_none());
+    assert_eq!(launch_paths(&args(&["goo", &uri]), Path::new("/")), [root.join("My Notes/a b.md")]);
+    assert!(launch_paths(&args(&["goo"]), &root).is_empty());
+    assert!(launch_paths(&args(&["goo", "nope.md"]), &root).is_empty());
 }
 
 #[test]
@@ -162,20 +163,40 @@ fn plan_open_keeps_the_workspace_when_the_note_is_inside_it() {
     touch(&root.join("sub/n.md"), "");
     touch(&root.join("other/x.md"), "");
     touch(&root.join("img.png"), "");
+    let one = |p: &str| vec![root.join(p)];
 
     // nothing open: the note's folder becomes the workspace
-    let p = plan_open(None, &root.join("sub/n.md")).unwrap();
-    assert_eq!(p, OpenPlan { root: root.join("sub"), file: Some(root.join("sub/n.md")), switch: true });
+    let p = plan_open(None, &one("sub/n.md")).unwrap();
+    assert_eq!(p, OpenPlan { root: root.join("sub"), files: one("sub/n.md"), skipped: vec![], switch: true });
     // inside the open folder: stay
-    let p = plan_open(Some(&root), &root.join("sub/n.md")).unwrap();
-    assert_eq!(p, OpenPlan { root: root.clone(), file: Some(root.join("sub/n.md")), switch: false });
+    let p = plan_open(Some(&root), &one("sub/n.md")).unwrap();
+    assert_eq!(p, OpenPlan { root: root.clone(), files: one("sub/n.md"), skipped: vec![], switch: false });
     // outside it: switch to the note's folder
-    let p = plan_open(Some(&root.join("sub")), &root.join("other/x.md")).unwrap();
+    let p = plan_open(Some(&root.join("sub")), &one("other/x.md")).unwrap();
     assert!(p.switch);
     assert_eq!(p.root, root.join("other"));
     // folders open as the workspace
-    assert_eq!(plan_open(Some(&root), &root).unwrap().switch, false);
-    assert_eq!(plan_open(None, &root.join("sub")).unwrap(), OpenPlan { root: root.join("sub"), file: None, switch: true });
+    assert!(!plan_open(Some(&root), &[root.clone()]).unwrap().switch);
+    assert_eq!(plan_open(None, &one("sub")).unwrap(), OpenPlan { root: root.join("sub"), files: vec![], skipped: vec![], switch: true });
     // only Markdown
-    assert_eq!(plan_open(None, &root.join("img.png")).unwrap_err().code, ErrorCode::InvalidName);
+    assert_eq!(plan_open(None, &one("img.png")).unwrap_err().code, ErrorCode::InvalidName);
+}
+
+#[test]
+fn plan_open_takes_a_whole_selection_into_one_window() {
+    let (_d, root) = ws();
+    for f in ["a.md", "b.md", "c.md", "other/x.md"] {
+        touch(&root.join(f), "");
+    }
+    touch(&root.join("pic.png"), "");
+    let paths: Vec<_> = ["a.md", "b.md", "pic.png", "a.md", "c.md"].iter().map(|f| root.join(f)).collect();
+    let p = plan_open(None, &paths).unwrap();
+    assert_eq!(p.root, root);
+    assert_eq!(p.files, [root.join("a.md"), root.join("b.md"), root.join("c.md")]);
+    assert_eq!(p.skipped, [root.join("pic.png")]);
+    // a selection spread over folders: the first note's folder wins, the rest is reported
+    let p = plan_open(None, &[root.join("other/x.md"), root.join("a.md")]).unwrap();
+    assert_eq!(p.root, root.join("other"));
+    assert_eq!(p.files, [root.join("other/x.md")]);
+    assert_eq!(p.skipped, [root.join("a.md")]);
 }

@@ -38,6 +38,8 @@ class WorkspaceStore {
   /** Folders collapsed in the tree (absolute paths). */
   collapsed = $state<Set<string>>(new Set())
   loading = $state(false)
+  /** The native folder picker is open (one at a time). */
+  picking = false
 
   active = $derived(this.docs.find((d) => d.path === this.activePath) ?? null)
   dirtyCount = $derived(this.docs.filter(isDirty).length)
@@ -85,7 +87,11 @@ class WorkspaceStore {
     }
     if (!req) return false
     if (req.switched || this.workspace?.root !== req.workspace.root) await this.activate(req.workspace)
-    if (req.file) await this.openFile(req.file)
+    for (const f of req.files) await this.openFile(f, { activate: f === req.files[0] })
+    if (req.skipped.length) {
+      const names = req.skipped.map(basename).join(', ')
+      ui.toast(`Not opened (not a note in ${req.workspace.name}): ${names}`)
+    }
     return true
   }
 
@@ -100,12 +106,16 @@ class WorkspaceStore {
 
   /** Native folder picker. */
   async pickFolder() {
-    if (!(await this.confirmLeave())) return
+    if (this.picking) return
+    this.picking = true
     try {
+      if (!(await this.confirmLeave())) return
       const ws = await backend.pickWorkspace()
       if (ws) await this.activate(ws)
     } catch (e) {
       ui.toast(errorMessage(e), 'error')
+    } finally {
+      this.picking = false
     }
   }
 
