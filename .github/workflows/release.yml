@@ -1,13 +1,12 @@
 name: Release
 
-# Builds goo's installers on every desktop platform:
-#   Linux x64 + arm64   .deb, .rpm, .AppImage
-#   macOS Apple silicon + Intel   .dmg
-#   Windows x64   setup .exe (NSIS) and .msi
+# Builds goo's installers on every desktop platform, named like Slinger's (scripts/release-assets.mjs):
+#   goo-<version>-linux-amd64.deb / -linux-arm64.deb, -linux-x86_64.AppImage / -linux-aarch64.AppImage,
+#   -linux-x86_64.rpm / -linux-aarch64.rpm, -mac-arm64.dmg / -mac-x64.dmg, -win-x64.exe / -win-x64.msi
 #
 # - Push a tag `vX.Y.Z` (matching package.json) -> a draft GitHub release with every installer attached.
 #   Review it on GitHub and press Publish.
-# - Run it by hand (Actions > Release > Run workflow) -> the same builds as workflow artifacts only, no release.
+# - Run it by hand (Actions > Release > Run workflow) -> the same installers as workflow artifacts only, no release.
 #
 # Builds are unsigned: macOS gets an ad-hoc signature (bundle.macOS.signingIdentity "-" in tauri.conf.json), so
 # Apple silicon opens it after the "unidentified developer" prompt; Windows shows SmartScreen. To sign later, add the
@@ -80,21 +79,41 @@ jobs:
 
       - run: npm ci
 
-      - name: Build (and attach to the draft release on tags)
-        uses: tauri-apps/tauri-action@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          args: ${{ matrix.args }}
-          tagName: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || '' }}
-          releaseName: goo ${{ github.ref_name }}
-          releaseBody: |
-            Download the installer for your system below.
+      - name: Build
+        shell: bash
+        run: npx tauri build ${{ matrix.args }}
 
-            - **Linux**: `.AppImage` (any distro: `chmod +x` and run), `.deb` (Debian/Ubuntu), `.rpm` (Fedora/openSUSE)
-            - **macOS**: `.dmg` (`aarch64` = Apple silicon, `x64` = Intel). Unsigned: right-click the app > Open the first time.
-            - **Windows**: `-setup.exe` or `.msi`. Unsigned: SmartScreen > More info > Run anyway.
-          releaseDraft: true
-          generateReleaseNotes: true
-          uploadWorkflowArtifacts: true
-          workflowArtifactNamePattern: goo-[version]-${{ matrix.name }}-[bundle]
+      - name: Name the installers
+        shell: bash
+        run: node scripts/release-assets.mjs ${{ matrix.name }} release-assets
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: goo-${{ matrix.name }}
+          path: release-assets/*
+          if-no-files-found: error
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: Draft release with every installer
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          ls -l release-assets
+          cat > notes.md <<'EOF'
+          Download the installer for your system below.
+
+          - **Linux**: `.AppImage` (any distro: `chmod +x` and run), `.deb` (Debian/Ubuntu), `.rpm` (Fedora/openSUSE); `amd64`/`x86_64` = Intel/AMD, `arm64`/`aarch64` = ARM
+          - **macOS**: `.dmg` (`arm64` = Apple silicon, `x64` = Intel). Unsigned: right-click the app > Open the first time.
+          - **Windows**: `.exe` (installer) or `.msi`. Unsigned: SmartScreen > More info > Run anyway.
+          EOF
+          gh release create "$GITHUB_REF_NAME" release-assets/* --draft --title "goo $GITHUB_REF_NAME" --notes-file notes.md --generate-notes --verify-tag
