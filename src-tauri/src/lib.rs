@@ -8,6 +8,8 @@
 
 mod cloud;
 mod mcp;
+mod uibridge;
+mod watch;
 
 use goo_core::{CoreError, ErrorCode, Recents, Tree};
 use serde::Serialize;
@@ -52,12 +54,13 @@ fn current_root(state: &AppState) -> CmdResult<PathBuf> {
 }
 
 /// Makes `path` the open folder and moves it to the top of the recent list.
-fn activate(state: &AppState, path: &Path) -> CmdResult<WorkspaceInfo> {
+fn activate(app: &AppHandle, state: &AppState, path: &Path) -> CmdResult<WorkspaceInfo> {
     let root = goo_core::canonical_root(path)?;
     let mut recents = Recents::load(&state.recents_file);
     recents.push(&root.to_string_lossy());
     recents.save(&state.recents_file)?;
     *state.root.lock().unwrap() = Some(root.clone());
+    app.state::<watch::FolderWatch>().follow(app, &root);
     Ok(info(&root))
 }
 
@@ -87,17 +90,17 @@ async fn pick_workspace(app: AppHandle, state: State<'_, AppState>) -> CmdResult
         return Ok(None);
     };
     let path = picked.into_path().map_err(|e| CoreError::new(ErrorCode::Io, e.to_string()))?;
-    activate(&state, &path).map(Some)
+    activate(&app, &state, &path).map(Some)
 }
 
 /// Reopens a folder from the recent list. Only folders the user picked before are accepted, so the UI cannot widen
 /// its own file access.
 #[tauri::command]
-fn open_workspace(root: String, state: State<'_, AppState>) -> CmdResult<WorkspaceInfo> {
+fn open_workspace(root: String, app: AppHandle, state: State<'_, AppState>) -> CmdResult<WorkspaceInfo> {
     if !Recents::load(&state.recents_file).contains(&root) {
         return Err(CoreError::new(ErrorCode::OutsideWorkspace, "Pick this folder with Open Folder first"));
     }
-    activate(&state, Path::new(&root))
+    activate(&app, &state, Path::new(&root))
 }
 
 /// Recent folders that still exist, most recent first.
@@ -188,14 +191,14 @@ fn request_open(app: &AppHandle, paths: Vec<PathBuf>) {
 /// Opens the pending request (if any): a note opens in the current folder when it is inside it, otherwise its folder
 /// becomes the open folder (and joins the recent list).
 #[tauri::command]
-fn take_open_request(state: State<'_, AppState>) -> CmdResult<Option<OpenRequest>> {
+fn take_open_request(app: AppHandle, state: State<'_, AppState>) -> CmdResult<Option<OpenRequest>> {
     let paths = std::mem::take(&mut *state.pending_open.lock().unwrap());
     if paths.is_empty() {
         return Ok(None);
     }
     let current = state.root.lock().unwrap().clone();
     let plan = goo_core::plan_open(current.as_deref(), &paths)?;
-    let workspace = if plan.switch { activate(&state, &plan.root)? } else { info(&plan.root) };
+    let workspace = if plan.switch { activate(&app, &state, &plan.root)? } else { info(&plan.root) };
     let strings = |v: Vec<PathBuf>| v.into_iter().map(|p| p.to_string_lossy().into_owned()).collect();
     Ok(Some(OpenRequest { workspace, files: strings(plan.files), skipped: strings(plan.skipped), switched: plan.switch }))
 }
@@ -252,9 +255,12 @@ pub fn run() {
             if Some(&config) != goo_mcp::files::app_config_dir().as_ref() {
                 eprintln!("goo: config dir {} differs from the MCP bridge's guess; `goo --mcp-stdio` may not find the app", config.display());
             }
+            goo_mcp::set_app_version(&app.package_info().version.to_string());
             let mcp = mcp::Mcp::new(&config);
             mcp.apply(app.handle());
             app.manage(mcp);
+            app.manage(watch::FolderWatch::default());
+            app.manage(uibridge::UiBridge::default());
             app.manage(cloud::Cloud::new(&config));
             cloud::Cloud::start(app.handle());
             Ok(())
@@ -286,6 +292,7 @@ pub fn run() {
             cloud::cloud_link,
             cloud::cloud_unlink,
             cloud::cloud_sync_now,
+            uibridge::ui_answer,
         ])
         .build(tauri::generate_context!())
         .expect("error while building goo")

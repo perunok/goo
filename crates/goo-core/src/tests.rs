@@ -248,3 +248,19 @@ fn search_finds_names_and_lines() {
     assert_eq!(search_notes(&root, "milk", 1).unwrap().len(), 1);
     assert!(search_notes(&root, "  ", 5).is_err());
 }
+
+#[test]
+fn watched_changes_follow_the_tree_filters() {
+    let (_d, root) = ws();
+    touch(&root.join("a.md"), "");
+    fs::create_dir_all(root.join("sub")).unwrap();
+    let c = |rel: &str| classify_change(&root, &root.join(rel));
+    assert_eq!(c("a.md"), WatchedChange::Note);
+    assert_eq!(c("deep/new/Plan.MARKDOWN"), WatchedChange::Note);
+    assert_eq!(c("sub"), WatchedChange::Tree);
+    assert_eq!(c("removed-folder"), WatchedChange::Tree);
+    for ignored in [".a.md.goo-123.tmp", ".git/HEAD", ".obsidian/x.md", "node_modules/p/README.md", "photo.png", "notes.txt", "target"] {
+        assert_eq!(c(ignored), WatchedChange::Ignore, "{ignored}");
+    }
+    assert_eq!(classify_change(&root, Path::new("/elsewhere/x.md")), WatchedChange::Ignore);
+}

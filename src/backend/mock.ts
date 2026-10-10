@@ -166,6 +166,7 @@ export function createMockBackend(opts: { latencyMs?: number; files?: Record<str
       cloudListeners.push(handler)
     },
     async cloudSetUtcOffset() {},
+    onUiQuery() {},
     async cloudSignIn(serverUrl) {
       if (!/^https:\/\/./.test(serverUrl)) fail('invalid_name', 'Enter the server address, starting with https://')
       cloud.signIn = { serverUrl, userCode: 'GOO-4821', verificationUri: `${serverUrl}/device`, verificationUriComplete: `${serverUrl}/device?user_code=GOO-4821` }

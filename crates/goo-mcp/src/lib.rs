@@ -18,6 +18,17 @@ pub mod tools;
 
 pub use tools::Host;
 
+/// goo's version as reported to clients (`serverInfo.version`); the app sets it at startup.
+static APP_VERSION: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+
+pub fn set_app_version(version: &str) {
+    let _ = APP_VERSION.set(version.to_string());
+}
+
+pub fn app_version() -> &'static str {
+    APP_VERSION.get().map(String::as_str).unwrap_or(env!("CARGO_PKG_VERSION"))
+}
+
 /// The arguments clients use to start the bridge: `goo --mcp-stdio`.
 pub const STDIO_FLAG: &str = "--mcp-stdio";
 

@@ -190,3 +190,21 @@ async function renderNow(source: string): Promise<MermaidResult> {
     document.getElementById(id)?.remove()
   }
 }
+
+/**
+ * Why `source` does not render as a Mermaid diagram, or null when it does (for AI assistants checking their
+ * diagrams). Runs the same parser as the preview, in the same queue.
+ */
+export function mermaidError(source: string): Promise<string | null> {
+  const run = queue.then(async () => {
+    const mermaid = await load()
+    try {
+      await mermaid.parse(source)
+      return null
+    } catch (e) {
+      return e instanceof Error ? e.message : String(e)
+    }
+  })
+  queue = run.catch(() => {})
+  return run
+}

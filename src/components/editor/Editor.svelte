@@ -13,6 +13,7 @@
   import { highlightSelectionMatches, searchKeymap } from '@codemirror/search'
   import { gooTheme } from './theme'
   import { insertLink, toggleWrap } from './commands'
+  import { editorSelection } from './selection'
 
   interface Props {
     docId: string
@@ -58,6 +59,10 @@
       ]),
       EditorView.updateListener.of((u) => {
         if (u.docChanged) onChange(u.state.doc.toString())
+        if (u.docChanged || u.selectionSet) {
+          const r = u.state.selection.main
+          editorSelection.set(currentId, r.from, r.to)
+        }
       }),
       gooTheme,
     ]

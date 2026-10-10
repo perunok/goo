@@ -329,6 +329,55 @@ impl Cloud {
         self.emit(app);
     }
 
+    /// A folder's goo cloud state for AI assistants (MCP `sync_status`).
+    pub fn folder_json(&self, root: &Path) -> serde_json::Value {
+        let root_s = root.to_string_lossy().into_owned();
+        let Some(link) = self.links.lock().unwrap().iter().find(|l| l.root == root_s).cloned() else {
+            return json!({ "linked": false, "message": "This folder does not sync with goo cloud." });
+        };
+        let signed_in = self.account.lock().unwrap().is_some();
+        let s = self.status.lock().unwrap().get(&root_s).cloned().unwrap_or_else(|| FolderStatus {
+            state: if signed_in { "idle".into() } else { "signed_out".into() },
+            ..Default::default()
+        });
+        json!({
+            "linked": true,
+            "workspace": link.workspace_name,
+            "role": link.role,
+            "state": s.state,
+            "last_synced_at": s.last_synced_at,
+            "message": s.message,
+            "conflicts": s.conflicts,
+            "not_synced": s.quarantined,
+            "waiting_for_save": s.deferred,
+            "not_uploaded_read_only": s.not_uploaded,
+        })
+    }
+
+    /// Syncs a linked folder now and waits until that sync has finished (or `timeout`).
+    pub fn sync_and_wait(&self, root: &Path, timeout: Duration) -> Result<serde_json::Value, String> {
+        let root_s = root.to_string_lossy().into_owned();
+        if !self.links.lock().unwrap().iter().any(|l| l.root == root_s) {
+            return Err("This folder does not sync with goo cloud.".into());
+        }
+        let snapshot = || self.status.lock().unwrap().get(&root_s).map(|s| (s.state.clone(), s.last_synced_at));
+        let before = snapshot();
+        self.trigger(Some(root_s.clone()));
+        let started = Instant::now();
+        let mut saw_syncing = false;
+        while started.elapsed() < timeout {
+            std::thread::sleep(Duration::from_millis(250));
+            let now = snapshot();
+            match &now {
+                Some((state, _)) if state == "syncing" => saw_syncing = true,
+                // finished: we saw it run, or it ran between two looks (new time, or a new state such as "offline")
+                Some(_) if saw_syncing || now != before => return Ok(self.folder_json(root)),
+                _ => {}
+            }
+        }
+        Err("The sync did not finish in time; it goes on in the background (see sync_status).".into())
+    }
+
     pub fn trigger(&self, root: Option<String>) {
         if let Some(tx) = &*self.trigger.lock().unwrap() {
             let _ = tx.send(Trigger::Soon(root));

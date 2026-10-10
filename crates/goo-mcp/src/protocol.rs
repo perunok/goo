@@ -12,7 +12,9 @@ opened in goo; only those folders are reachable. Start with list_workspaces, the
 tools use the folder open in goo unless you pass \"workspace\". Paths are relative to the folder (\"projects/plan.md\"). \
 Changes appear in the goo window at once. Prefer edit_note for small changes and read a note before rewriting it. \
 Notes with unsaved edits in goo are never overwritten: if a write is refused, ask the user to save first. \
-Diagrams: goo renders ```mermaid code blocks. There is no delete tool.";
+Diagrams: goo renders ```mermaid code blocks; check them with check_mermaid after writing. \
+\"This note\" or \"the selection\" means get_open_note. If the folder syncs with goo cloud, writes are synced \
+automatically; sync_status lists conflicts to resolve. There is no delete tool.";
 
 pub const PARSE_ERROR: i64 = -32700;
 pub const INVALID_REQUEST: i64 = -32600;
@@ -41,7 +43,7 @@ pub fn tool_list() -> Value {
                     "readOnlyHint": t.read_only,
                     "destructiveHint": t.destructive,
                     "idempotentHint": t.read_only,
-                    "openWorldHint": false
+                    "openWorldHint": t.open_world
                 }
             })
         })
@@ -76,7 +78,7 @@ pub fn handle(host: &dyn Host, msg: Value) -> Option<Value> {
                 json!({
                     "protocolVersion": version,
                     "capabilities": { "tools": { "listChanged": false } },
-                    "serverInfo": { "name": "goo", "title": "goo", "version": env!("CARGO_PKG_VERSION") },
+                    "serverInfo": { "name": "goo", "title": "goo", "version": crate::app_version() },
                     "instructions": INSTRUCTIONS
                 }),
             )

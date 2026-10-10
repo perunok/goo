@@ -6,6 +6,21 @@ No account, no telemetry, nothing uploaded.
 
 Plain Markdown, your folders, your colours: read [the Goo Manifesto](#manifesto).
 
+![goo: a notes folder in split view, Markdown on the left and its live preview with Mermaid diagrams on the right (Tokyo Night theme, violet accent)](docs/screenshots/01-split-mermaid.png)
+
+**Download:** [latest release](https://github.com/perunok/goo/releases/latest): Linux (`.deb`, `.rpm`, AppImage;
+x64 and arm64), macOS (`.dmg`; Apple silicon and Intel), Windows (`.exe`, `.msi`).
+
+## Screenshots
+
+| | |
+|---|---|
+| ![Preview in GitHub Light](docs/screenshots/02-preview-light.png)<br>**Preview** with tables, task lists and code, in any of 31 themes | ![Reading width](docs/screenshots/03-tables-reading-width.png)<br>**Reading width** (narrow to full) and tables that size to their content |
+| ![Themes and accents](docs/screenshots/04-themes.png)<br>**31 themes × 18 accents**, each pair checked for contrast | ![goo cloud](docs/screenshots/05-goo-cloud.png)<br>**goo cloud**: sync a folder between computers and share it |
+| ![AI assistants](docs/screenshots/06-ai-assistants.png)<br>**AI assistants (MCP)**: Claude and others work with your notes | ![Welcome](docs/screenshots/07-welcome.png)<br>**Welcome**: open a folder, or a recent one |
+
+Regenerate them with `npm run dev` and `npm run screenshots`.
+
 ## Features
 
 - **Folders, not databases.** Open any folder: goo lists its Markdown files (`.md`, `.markdown`) as a tree, with a
@@ -22,10 +37,17 @@ Plain Markdown, your folders, your colours: read [the Goo Manifesto](#manifesto)
   checked for WCAG AA contrast (AAA for the high-contrast themes) by the test suite.
 - **Tabs** with per-tab undo history, unsaved markers and save prompts; the last folder and open notes come back on
   the next start.
+- **Notices outside changes**: when another program (another editor, `git pull`, Claude Code, a sync tool) changes a
+  note, goo reloads it and refreshes the tree. If you have unsaved edits they stay, and saving asks whether to keep
+  yours or load theirs.
+- **Open with goo** from any file manager (or `goo notes.md`): the note opens in its folder; a selection of notes opens
+  as tabs in the one goo window.
+- **Reading width**: narrow, medium, wide or full, for the preview and the editor.
 - **Links between notes**: `[see this](../other.md#section)` opens the other note and scrolls to the heading. Web
   links open in your browser.
 - **AI assistants (MCP)**: turn on Settings > AI assistants and Claude (Code or Desktop), Cursor, VS Code and other
-  MCP clients can list, read, search, create and edit your notes, and show a note in goo. See [AI assistants](#ai-assistants-mcp).
+  MCP clients can read, search, create and edit your notes, see the note you have open (with your selection), check
+  that their Mermaid diagrams render, and sync with goo cloud. See [AI assistants](#ai-assistants-mcp).
 - **goo cloud** (optional, self-hosted [goo-cloud](https://github.com/perunok/goo-cloud) server): sync a folder
   between your computers and share it, with line-by-line merging of edits made on two devices and conflict copies
   instead of lost text. Settings > goo cloud.
@@ -45,10 +67,19 @@ Cursor, Windsurf, VS Code or any Streamable-HTTP client. Assistants run `goo --m
 | `list_notes`, `read_note`, `search_notes` | Browse, read and search notes |
 | `create_note`, `edit_note`, `append_to_note`, `write_note` | Create and change notes (missing folders are created) |
 | `open_in_app` | Show a note in the goo window |
+| `get_open_note` | The note on screen as you see it, unsaved edits and selection included ("fix this paragraph") |
+| `check_mermaid` | Checks diagrams with goo's own Mermaid renderer (a note's blocks or a snippet): line and error for each |
+| `sync_status`, `sync_now` | goo cloud: last sync, conflicts to resolve, notes that could not sync; sync immediately |
 
 Rules: only folders you opened in goo are reachable, paths cannot leave them, notes with unsaved edits in goo are
-never overwritten, and there is no delete. Changes show up in goo at once. The endpoint listens on `127.0.0.1`
-only, needs a token (Settings can issue a new one) and turns away browser requests.
+never overwritten, and there is no delete. Changes show up in goo at once, and in a synced folder they go to goo
+cloud right away. The endpoint listens on `127.0.0.1` only, needs a token (Settings can issue a new one) and turns
+away browser requests.
+
+**Why MCP when an assistant can edit files itself?** Assistants without file access (Claude Desktop, chat apps) get
+your notes at all; every assistant gets what only goo knows (the note on screen with unsaved text and selection,
+whether diagrams really render, sync state and conflicts) and goo's safety rules (no writes over your unsaved edits,
+only your note folders, no delete). Direct file edits by tools like Claude Code also work: goo notices them.
 
 ## Keyboard
 
@@ -60,7 +91,7 @@ only, needs a token (Settings can issue a new one) and turns away browser reques
 | `Ctrl+W`, `Ctrl+Tab` | Close tab, next tab |
 | `Ctrl+E` | Cycle edit / split / preview |
 | `Ctrl+\` | Toggle sidebar |
-| `Ctrl+,` | Settings (themes, accents, font) |
+| `Ctrl+,` | Settings (appearance, goo cloud, AI assistants) |
 | `Ctrl+=` / `Ctrl+-` / `Ctrl+0` | Font size |
 | `Ctrl+B` / `Ctrl+I` / `Ctrl+K` | Bold / italic / link (in the editor) |
 
@@ -86,7 +117,7 @@ Checks:
 
 ```bash
 npm run typecheck     # svelte-check
-npm test              # Vitest: renderer, themes (contrast of every theme x accent), paths, settings
+npm test              # Vitest: renderer, themes (contrast of every theme x accent), paths, settings, outside changes
 npm run test:rust     # goo-core and goo-mcp: files, path guarding, search, MCP protocol, endpoint, bridge
 ```
 
@@ -133,7 +164,6 @@ crates/goo-sync/     goo cloud sync engine: scan, 3-way merge, pull/push, device
 
 ## Roadmap
 
-- Watch the folder for outside changes (reload / conflict prompt)
 - Local images next to notes
 - Outline panel, quick open (`Ctrl+P`), command palette
 - Rename, move and delete notes; folders

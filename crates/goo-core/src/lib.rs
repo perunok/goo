@@ -150,6 +150,36 @@ fn path_string(p: &Path) -> String {
     p.to_string_lossy().into_owned()
 }
 
+/// What a file-system change under `root` means for the app (folder watching). Only changes the tree could show
+/// matter: Markdown files and folders, not inside hidden or build/dependency folders. goo's own temp files
+/// (`.name.goo-<pid>.tmp`) are hidden and so ignored.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WatchedChange {
+    /// A note changed (or appeared, or went away): reload it if open, refresh the tree.
+    Note,
+    /// Something else that may change the tree (a folder appeared or went away).
+    Tree,
+    /// Not shown by goo.
+    Ignore,
+}
+
+pub fn classify_change(root: &Path, path: &Path) -> WatchedChange {
+    let Ok(rel) = path.strip_prefix(root) else { return WatchedChange::Ignore };
+    let parts: Vec<String> = rel.components().map(|c| c.as_os_str().to_string_lossy().into_owned()).collect();
+    let Some((last, dirs)) = parts.split_last() else { return WatchedChange::Ignore };
+    if dirs.iter().any(|d| is_hidden(d) || SKIPPED_DIRS.contains(&d.as_str())) || is_hidden(last) {
+        return WatchedChange::Ignore;
+    }
+    if is_markdown(path) {
+        WatchedChange::Note
+    } else if path.is_dir() || path.extension().is_none() {
+        // a folder (or one that was just removed, so it can no longer be checked)
+        if SKIPPED_DIRS.contains(&last.as_str()) { WatchedChange::Ignore } else { WatchedChange::Tree }
+    } else {
+        WatchedChange::Ignore
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Path guarding
 // ---------------------------------------------------------------------------
