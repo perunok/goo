@@ -41,8 +41,10 @@ export interface BackendError {
 /** A file or folder opened from outside the app ("Open with goo", `goo notes.md`), once taken. */
 export interface OpenRequest {
   workspace: Workspace
-  /** The note to open; null when a folder was opened. */
-  file: string | null
+  /** The notes to open (several when a selection was opened); empty when a folder was opened. */
+  files: string[]
+  /** Paths left out: not Markdown, or in another folder than the rest of the selection. */
+  skipped: string[]
   /** The open folder changed. */
   switched: boolean
 }

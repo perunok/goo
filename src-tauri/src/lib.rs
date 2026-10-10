@@ -9,6 +9,7 @@
 use goo_core::{CoreError, ErrorCode, Recents, Tree};
 use serde::Serialize;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_dialog::DialogExt;
@@ -20,8 +21,10 @@ struct AppState {
     /// Canonical root of the open folder.
     root: Mutex<Option<PathBuf>>,
     recents_file: PathBuf,
-    /// A file or folder to open that came from outside the app, waiting for the UI to take it.
-    pending_open: Mutex<Option<PathBuf>>,
+    /// Files or a folder to open that came from outside the app, waiting for the UI to take them.
+    pending_open: Mutex<Vec<PathBuf>>,
+    /// A folder picker is on screen (only one at a time).
+    picking: AtomicBool,
 }
 
 #[derive(Serialize)]
@@ -53,10 +56,29 @@ fn activate(state: &AppState, path: &Path) -> CmdResult<WorkspaceInfo> {
     Ok(info(&root))
 }
 
-/// Native folder picker. The dialog blocks, so this runs as an async command (off the main thread).
+/// Clears `AppState::picking` when the picker closes, however the command ends.
+struct PickingGuard<'a>(&'a AtomicBool);
+
+impl Drop for PickingGuard<'_> {
+    fn drop(&mut self) {
+        self.0.store(false, Ordering::SeqCst);
+    }
+}
+
+/// Native folder picker, attached to the goo window (modal) and never more than one at a time: a second request
+/// while one is open is ignored. The dialog blocks, so this runs as an async command (off the main thread).
 #[tauri::command]
 async fn pick_workspace(app: AppHandle, state: State<'_, AppState>) -> CmdResult<Option<WorkspaceInfo>> {
-    let Some(picked) = app.dialog().file().set_title("Open a folder of notes").blocking_pick_folder() else {
+    if state.picking.swap(true, Ordering::SeqCst) {
+        return Ok(None);
+    }
+    let _guard = PickingGuard(&state.picking);
+    let mut dialog = app.dialog().file().set_title("Open a folder of notes");
+    #[cfg(desktop)]
+    if let Some(window) = app.get_webview_window("main") {
+        dialog = dialog.set_parent(&window);
+    }
+    let Some(picked) = dialog.blocking_pick_folder() else {
         return Ok(None);
     };
     let path = picked.into_path().map_err(|e| CoreError::new(ErrorCode::Io, e.to_string()))?;
@@ -121,8 +143,10 @@ async fn create_file(dir: String, name: String, contents: String, state: State<'
 #[derive(Serialize)]
 struct OpenRequest {
     workspace: WorkspaceInfo,
-    /// The note to open, if a file (not a folder) was opened.
-    file: Option<String>,
+    /// The notes to open (empty when a folder was opened).
+    files: Vec<String>,
+    /// Paths that were left out (not Markdown, or in another folder than the rest of the selection).
+    skipped: Vec<String>,
     /// True when the open folder changed.
     switched: bool,
 }
@@ -135,14 +159,14 @@ struct OpenEvent {
     switch: bool,
 }
 
-/// Queues `path` and tells the UI. Called for launch arguments of a second instance and macOS open events.
-fn request_open(app: &AppHandle, path: PathBuf) {
+/// Queues `paths` and tells the UI. Called for the arguments of a second launch and for macOS open events.
+fn request_open(app: &AppHandle, paths: Vec<PathBuf>) {
     let state = app.state::<AppState>();
     let current = state.root.lock().unwrap().clone();
-    match goo_core::plan_open(current.as_deref(), &path) {
+    match goo_core::plan_open(current.as_deref(), &paths) {
         Ok(plan) => {
-            let event = OpenEvent { path: path.to_string_lossy().into_owned(), switch: plan.switch };
-            *state.pending_open.lock().unwrap() = Some(path);
+            let event = OpenEvent { path: plan.root.to_string_lossy().into_owned(), switch: plan.switch };
+            *state.pending_open.lock().unwrap() = paths;
             let _ = app.emit("open-request", event);
         }
         Err(e) => {
@@ -160,23 +184,21 @@ fn request_open(app: &AppHandle, path: PathBuf) {
 /// becomes the open folder (and joins the recent list).
 #[tauri::command]
 fn take_open_request(state: State<'_, AppState>) -> CmdResult<Option<OpenRequest>> {
-    let Some(path) = state.pending_open.lock().unwrap().take() else {
+    let paths = std::mem::take(&mut *state.pending_open.lock().unwrap());
+    if paths.is_empty() {
         return Ok(None);
-    };
+    }
     let current = state.root.lock().unwrap().clone();
-    let plan = goo_core::plan_open(current.as_deref(), &path)?;
+    let plan = goo_core::plan_open(current.as_deref(), &paths)?;
     let workspace = if plan.switch { activate(&state, &plan.root)? } else { info(&plan.root) };
-    Ok(Some(OpenRequest {
-        workspace,
-        file: plan.file.map(|f| f.to_string_lossy().into_owned()),
-        switched: plan.switch,
-    }))
+    let strings = |v: Vec<PathBuf>| v.into_iter().map(|p| p.to_string_lossy().into_owned()).collect();
+    Ok(Some(OpenRequest { workspace, files: strings(plan.files), skipped: strings(plan.skipped), switched: plan.switch }))
 }
 
 /// The user kept the current folder (e.g. cancelled at "unsaved changes").
 #[tauri::command]
 fn drop_open_request(state: State<'_, AppState>) {
-    state.pending_open.lock().unwrap().take();
+    state.pending_open.lock().unwrap().clear();
 }
 
 /// Opens a link from a rendered note in the system browser or mail client. Nothing else is opened.
@@ -196,14 +218,14 @@ pub fn run() {
     // Must be the first plugin: a second launch exits right away and passes its arguments to this instance.
     #[cfg(desktop)]
     let builder = builder.plugin(tauri_plugin_single_instance::init(|app, argv, cwd| {
-        match goo_core::launch_path(&argv, Path::new(&cwd)) {
-            Some(path) => request_open(app, path),
-            None => {
-                if let Some(window) = app.get_webview_window("main") {
-                    let _ = window.unminimize();
-                    let _ = window.set_focus();
-                }
+        let paths = goo_core::launch_paths(&argv, Path::new(&cwd));
+        if paths.is_empty() {
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.unminimize();
+                let _ = window.set_focus();
             }
+        } else {
+            request_open(app, paths);
         }
     }));
 
@@ -218,7 +240,8 @@ pub fn run() {
             app.manage(AppState {
                 root: Mutex::new(None),
                 recents_file: config.join("recent-workspaces.json"),
-                pending_open: Mutex::new(goo_core::launch_path(&args, &cwd)),
+                pending_open: Mutex::new(goo_core::launch_paths(&args, &cwd)),
+                picking: AtomicBool::new(false),
             });
             Ok(())
         })
@@ -243,8 +266,9 @@ pub fn run() {
             #[cfg(target_os = "macos")]
             {
                 if let tauri::RunEvent::Opened { urls } = &_event {
-                    if let Some(path) = urls.iter().find_map(|u| u.to_file_path().ok()) {
-                        request_open(_app, path);
+                    let paths: Vec<PathBuf> = urls.iter().filter_map(|u| u.to_file_path().ok()).collect();
+                    if !paths.is_empty() {
+                        request_open(_app, paths);
                     }
                 }
             }
