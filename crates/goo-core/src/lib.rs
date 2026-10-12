@@ -104,7 +104,7 @@ pub fn is_hidden(name: &str) -> bool {
 }
 
 /// Markdown files under `root`, folders first, both sorted case-insensitively. Hidden entries, build/dependency
-/// folders and folders without any Markdown inside are left out. Symlinked folders are not followed (no cycles).
+/// folders and folders that hold only other kinds of files are left out (empty folders are listed). Symlinked folders are not followed (no cycles).
 pub fn list_tree(root: &Path) -> Result<Tree> {
     let mut budget = MAX_TREE_ENTRIES;
     let nodes = walk(root, &mut budget)?;
@@ -132,7 +132,10 @@ fn walk(dir: &Path, budget: &mut usize) -> Result<Vec<TreeNode>> {
             }
             // An unreadable sub-folder should not hide the rest of the tree.
             let children = walk(&path, budget).unwrap_or_default();
-            if !children.is_empty() {
+            // Folders with notes, and truly empty folders (just made in goo, waiting for a first note). Folders holding
+            // only other files (images, PDFs) stay hidden.
+            let empty = fs::read_dir(&path).map(|mut d| d.next().is_none()).unwrap_or(false);
+            if !children.is_empty() || empty {
                 dirs.push(TreeNode { name, path: path_string(&path), kind: NodeKind::Dir, children: Some(children) });
             }
         } else if (ft.is_file() || ft.is_symlink()) && is_markdown(&path) {
@@ -355,6 +358,121 @@ pub fn search_notes(root: &Path, query: &str, limit: usize) -> Result<Vec<Search
         }
     }
     Ok(hits)
+}
+
+// ---------------------------------------------------------------------------
+// File management: rename, move, new folder, delete
+// ---------------------------------------------------------------------------
+
+/// An existing note or folder inside `root`, as a path whose parent is canonical. The entry itself is not resolved, so a
+/// symlink is renamed/moved/deleted as a link, never what it points to. The root itself is refused.
+pub fn entry_inside(root: &Path, path: &Path) -> Result<PathBuf> {
+    let name = path.file_name().ok_or_else(|| CoreError::new(ErrorCode::InvalidName, "that is the folder itself"))?;
+    let parent = path.parent().ok_or_else(|| CoreError::new(ErrorCode::InvalidName, "that is the folder itself"))?;
+    let entry = resolve_inside(root, parent)?.join(name);
+    if entry == root || fs::symlink_metadata(&entry).is_err() {
+        return Err(CoreError::new(ErrorCode::NotFound, format!("{} does not exist", path.display())));
+    }
+    Ok(entry)
+}
+
+fn same_entry(a: &Path, b: &Path) -> bool {
+    match (fs::canonicalize(a), fs::canonicalize(b)) {
+        (Ok(x), Ok(y)) => x == y,
+        _ => false,
+    }
+}
+
+/// Renames `from` to `to` (both checked by the caller). `to` must be free, except when it is the same entry spelled
+/// differently (a case-only rename on a case-insensitive disk), which goes through a temporary name.
+fn rename_checked(from: &Path, to: &Path) -> Result<()> {
+    if fs::symlink_metadata(to).is_ok() {
+        if !same_entry(from, to) {
+            return Err(CoreError::new(ErrorCode::AlreadyExists, format!("{} already exists", to.display())));
+        }
+        if from.file_name() == to.file_name() {
+            return Ok(());
+        }
+        let tmp = from.with_file_name(format!(".goo-rename-{}", std::process::id()));
+        fs::rename(from, &tmp)?;
+        fs::rename(&tmp, to)?;
+        return Ok(());
+    }
+    fs::rename(from, to)?;
+    Ok(())
+}
+
+/// Renames a note or folder where it is. A note keeps a Markdown extension (".md" is added when the new name has
+/// none). Returns the new path.
+pub fn rename_entry(root: &Path, path: &Path, new_name: &str) -> Result<PathBuf> {
+    let from = entry_inside(root, path)?;
+    let name = validate_name(new_name)?;
+    let mut to = from.with_file_name(name);
+    if !from.is_dir() && !is_markdown(&to) {
+        to = from.with_file_name(format!("{name}.md"));
+    }
+    rename_checked(&from, &to)?;
+    Ok(to)
+}
+
+/// Moves a note or folder into another folder of the workspace (keeping its name). Returns the new path.
+pub fn move_entry(root: &Path, path: &Path, dest_dir: &Path) -> Result<PathBuf> {
+    let from = entry_inside(root, path)?;
+    let dest = resolve_inside(root, dest_dir)?;
+    if !dest.is_dir() {
+        return Err(CoreError::new(ErrorCode::InvalidName, format!("{} is not a folder", dest_dir.display())));
+    }
+    if from.is_dir() && dest.starts_with(fs::canonicalize(&from)?) {
+        return Err(CoreError::new(ErrorCode::InvalidName, "a folder cannot move into itself"));
+    }
+    let to = dest.join(from.file_name().expect("entry_inside has a name"));
+    if to == from {
+        return Ok(to);
+    }
+    rename_checked(&from, &to)?;
+    Ok(to)
+}
+
+/// Moves (and/or renames) a note to a workspace-relative path, creating missing folders. Used by AI assistants.
+pub fn move_note_to(root: &Path, path: &Path, new_rel: &str) -> Result<PathBuf> {
+    let from = entry_inside(root, path)?;
+    if from.is_dir() {
+        return Err(CoreError::new(ErrorCode::InvalidName, "only notes can be moved this way"));
+    }
+    let mut parts = relative_parts(new_rel)?;
+    let name = parts.pop().expect("relative_parts is never empty");
+    let mut dir = root.to_path_buf();
+    for part in parts {
+        dir.push(part);
+        if !dir.exists() {
+            fs::create_dir(&dir)?;
+        }
+        dir = resolve_inside(root, &dir)?;
+    }
+    let mut to = dir.join(name);
+    if !is_markdown(&to) {
+        to = dir.join(format!("{name}.md"));
+    }
+    rename_checked(&from, &to)?;
+    Ok(to)
+}
+
+/// Makes a new, empty folder in `parent`. Returns its path.
+pub fn create_folder(root: &Path, parent: &Path, name: &str) -> Result<PathBuf> {
+    let parent = resolve_inside(root, parent)?;
+    let dir = parent.join(validate_name(name)?);
+    if fs::symlink_metadata(&dir).is_ok() {
+        return Err(CoreError::new(ErrorCode::AlreadyExists, format!("{} already exists", dir.display())));
+    }
+    fs::create_dir(&dir)?;
+    Ok(dir)
+}
+
+/// Deletes a note or folder of the workspace with `remove` (the app passes the system trash). Never the root.
+pub fn delete_entry(root: &Path, path: &Path, remove: impl FnOnce(&Path) -> io::Result<()>) -> Result<PathBuf> {
+    let entry = entry_inside(root, path)?;
+    remove(&entry).map_err(|e| CoreError::new(ErrorCode::Io, format!("Could not delete {}: {e}", entry.display())))?;
+    Ok(entry)
 }
 
 // ---------------------------------------------------------------------------

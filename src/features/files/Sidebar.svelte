@@ -4,8 +4,67 @@
   import Icon from '../../components/ui/Icon.svelte'
   import { relativeTo } from '../../lib/paths'
   import FileTree from './FileTree.svelte'
+  import ContextMenu, { type MenuItem } from '../../components/ui/ContextMenu.svelte'
+  import type { TreeNode } from '../../backend/types'
+  import { canDrop, dragged } from './dnd'
 
   let filter = $state('')
+  let menu = $state<{ x: number; y: number; items: (MenuItem | null)[] } | null>(null)
+  let rootDrop = $state(false)
+
+  function nodeMenu(e: MouseEvent, node: TreeNode) {
+    const items: (MenuItem | null)[] =
+      node.kind === 'dir'
+        ? [
+            { label: 'New note here', icon: 'filePlus', action: () => workspace.newNote(node.path) },
+            { label: 'New folder here', icon: 'folderPlus', action: () => workspace.newFolder(node.path) },
+            null,
+            { label: 'Rename…', icon: 'pencil', hint: 'F2', action: () => workspace.renameEntry(node) },
+            { label: 'Show in file manager', icon: 'folderOpen', action: () => workspace.revealEntry(node.path) },
+            null,
+            { label: 'Delete folder', icon: 'trash', hint: 'Del', danger: true, action: () => workspace.deleteEntry(node) },
+          ]
+        : [
+            { label: 'Open', icon: 'file', action: () => workspace.openFile(node.path) },
+            { label: 'Rename…', icon: 'pencil', hint: 'F2', action: () => workspace.renameEntry(node) },
+            { label: 'Show in file manager', icon: 'folderOpen', action: () => workspace.revealEntry(node.path) },
+            null,
+            { label: 'Delete', icon: 'trash', hint: 'Del', danger: true, action: () => workspace.deleteEntry(node) },
+          ]
+    menu = { x: e.clientX, y: e.clientY, items }
+  }
+
+  function rootMenu(e: MouseEvent) {
+    const root = workspace.workspace?.root
+    if (!root || (e.target as HTMLElement).closest('.row')) return
+    e.preventDefault()
+    menu = {
+      x: e.clientX,
+      y: e.clientY,
+      items: [
+        { label: 'New note', icon: 'filePlus', action: () => workspace.newNote() },
+        { label: 'New folder', icon: 'folderPlus', action: () => workspace.newFolder() },
+        null,
+        { label: 'Show in file manager', icon: 'folderOpen', action: () => workspace.revealEntry(root) },
+      ],
+    }
+  }
+
+  function onRootDragOver(e: DragEvent) {
+    const root = workspace.workspace?.root
+    if (!root || !canDrop(dragged.path, root)) return
+    e.preventDefault()
+    rootDrop = true
+  }
+
+  function onRootDrop(e: DragEvent) {
+    e.preventDefault()
+    rootDrop = false
+    const root = workspace.workspace?.root
+    const path = dragged.path
+    dragged.path = ''
+    if (root && canDrop(path, root)) void workspace.moveEntry(path, root)
+  }
 
   const matches = $derived.by(() => {
     const q = filter.trim().toLowerCase()
@@ -28,6 +87,7 @@
     <div class="head">
       <span class="ws" title={workspace.workspace.root}>{workspace.workspace.name}</span>
       <IconButton icon="filePlus" label="New note (Ctrl+N)" onclick={() => workspace.newNote()} />
+      <IconButton icon="folderPlus" label="New folder" onclick={() => workspace.newFolder()} />
       <IconButton icon="refresh" label="Refresh" onclick={() => workspace.refreshTree()} />
       <IconButton icon="folderOpen" label="Open folder (Ctrl+O)" onclick={() => workspace.pickFolder()} />
     </div>
@@ -35,7 +95,17 @@
       <Icon name="search" size={14} />
       <input bind:value={filter} placeholder="Filter notes" spellcheck="false" {onkeydown} />
     </label>
-    <div class="scroll">
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div
+      class="scroll"
+      class:drop={rootDrop}
+      oncontextmenu={rootMenu}
+      ondragover={onRootDragOver}
+      ondragleave={(e) => {
+        if (e.target === e.currentTarget) rootDrop = false
+      }}
+      ondrop={onRootDrop}
+    >
       {#if filter.trim()}
         {#each matches as m (m.node.path)}
           <button type="button" class="match" class:active={workspace.activePath === m.node.path} onclick={() => workspace.openFile(m.node.path)} title={m.rel}>
@@ -45,7 +115,7 @@
           <p class="empty">No notes match “{filter}”.</p>
         {/each}
       {:else if workspace.tree && workspace.tree.nodes.length}
-        <FileTree nodes={workspace.tree.nodes} />
+        <FileTree nodes={workspace.tree.nodes} onMenu={nodeMenu} />
         {#if workspace.tree.truncated}<p class="empty">This folder is very large; not every note is listed.</p>{/if}
       {:else if workspace.tree}
         <div class="empty">
@@ -56,6 +126,10 @@
     </div>
   {/if}
 </aside>
+
+{#if menu}
+  <ContextMenu x={menu.x} y={menu.y} items={menu.items} onClose={() => (menu = null)} />
+{/if}
 
 <style>
   .sidebar {
@@ -109,6 +183,10 @@
     min-height: 0;
     overflow: auto;
     padding: 0 6px 12px;
+    border-radius: var(--radius);
+  }
+  .scroll.drop {
+    box-shadow: inset 0 0 0 1px var(--accent);
   }
   .match {
     display: block;

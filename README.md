@@ -28,7 +28,8 @@ Regenerate them with `npm run dev` and `npm run screenshots`.
 ## Features
 
 - **Folders, not databases.** Open any folder: goo lists its Markdown files (`.md`, `.markdown`) as a tree, with a
-  quick filter. Notes are saved as plain UTF-8 files with atomic writes (temp file + rename), so a crash never leaves
+  quick filter. Right-click to create notes and folders, rename (F2), delete (Del) or show in the file manager; drag
+  notes and folders to move them. Deleting moves things to the system trash, so it can be undone. Notes are saved as plain UTF-8 files with atomic writes (temp file + rename), so a crash never leaves
   half a note behind.
 - **Edit, split or preview** (`Ctrl+E`): a CodeMirror 6 editor with Markdown highlighting (and highlighting inside
   fenced code), next to a live GitHub-flavoured preview: tables, task lists, strikethrough, heading
@@ -72,19 +73,21 @@ Windows), which talks to the open goo
 | `list_notes`, `read_note`, `search_notes` | Browse, read and search notes |
 | `create_note`, `edit_note`, `append_to_note`, `write_note` | Create and change notes (missing folders are created) |
 | `open_in_app` | Show a note in the goo window |
+| `move_note`, `delete_note` | Rename or move a note (folders are created); delete moves it to the system trash |
 | `get_open_note` | The note on screen as you see it, unsaved edits and selection included ("fix this paragraph") |
 | `check_mermaid` | Checks diagrams with goo's own Mermaid renderer (a note's blocks or a snippet): line and error for each |
 | `sync_status`, `sync_now` | goo cloud: last sync, conflicts to resolve, notes that could not sync; sync immediately |
 
 Rules: only folders you opened in goo are reachable, paths cannot leave them, notes with unsaved edits in goo are
-never overwritten, and there is no delete. Changes show up in goo at once, and in a synced folder they go to goo
+never written, moved or deleted, and deleting only moves a note to the system trash (marked destructive, so your
+assistant asks you first). Changes show up in goo at once, and in a synced folder they go to goo
 cloud right away. The endpoint listens on `127.0.0.1` only, needs a token (Settings can issue a new one) and turns
 away browser requests.
 
 **Why MCP when an assistant can edit files itself?** Assistants without file access (Claude Desktop, chat apps) get
 your notes at all; every assistant gets what only goo knows (the note on screen with unsaved text and selection,
 whether diagrams really render, sync state and conflicts) and goo's safety rules (no writes over your unsaved edits,
-only your note folders, no delete). Direct file edits by tools like Claude Code also work: goo notices them.
+only your note folders, deletes go to the trash). Direct file edits by tools like Claude Code also work: goo notices them.
 
 ## Keyboard
 
@@ -99,6 +102,7 @@ only your note folders, no delete). Direct file edits by tools like Claude Code 
 | `Ctrl+,` | Settings (appearance, goo cloud, AI assistants) |
 | `Ctrl+=` / `Ctrl+-` / `Ctrl+0` | Font size |
 | `Ctrl+B` / `Ctrl+I` / `Ctrl+K` | Bold / italic / link (in the editor) |
+| `F2` / `Del` (in the tree) | Rename / delete (to the trash) the selected note or folder |
 
 ## Getting started
 
@@ -171,7 +175,6 @@ crates/goo-sync/     goo cloud sync engine: scan, 3-way merge, pull/push, device
 
 - Local images next to notes
 - Outline panel, quick open (`Ctrl+P`), command palette
-- Rename, move and delete notes; folders
 - Export to HTML / PDF
 - Custom themes (as in Slinger)
 

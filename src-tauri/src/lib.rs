@@ -148,6 +148,50 @@ async fn create_file(dir: String, name: String, contents: String, state: State<'
     Ok(file.to_string_lossy().into_owned())
 }
 
+fn path_out(p: PathBuf) -> String {
+    p.to_string_lossy().into_owned()
+}
+
+/// Moves a note or folder to the system trash (recoverable from there).
+pub(crate) fn to_trash(path: &Path) -> std::io::Result<()> {
+    trash::delete(path).map_err(|e| std::io::Error::other(e.to_string()))
+}
+
+/// Renames a note or folder where it is; returns the new path.
+#[tauri::command]
+async fn rename_entry(path: String, new_name: String, state: State<'_, AppState>) -> CmdResult<String> {
+    let root = current_root(&state)?;
+    goo_core::rename_entry(&root, Path::new(&path), &new_name).map(path_out)
+}
+
+/// Moves a note or folder into another folder; returns the new path.
+#[tauri::command]
+async fn move_entry(path: String, dest_dir: String, state: State<'_, AppState>) -> CmdResult<String> {
+    let root = current_root(&state)?;
+    goo_core::move_entry(&root, Path::new(&path), Path::new(&dest_dir)).map(path_out)
+}
+
+#[tauri::command]
+async fn create_folder(dir: String, name: String, state: State<'_, AppState>) -> CmdResult<String> {
+    let root = current_root(&state)?;
+    goo_core::create_folder(&root, Path::new(&dir), &name).map(path_out)
+}
+
+/// Moves a note or folder to the system trash.
+#[tauri::command]
+async fn delete_entry(path: String, state: State<'_, AppState>) -> CmdResult<()> {
+    let root = current_root(&state)?;
+    goo_core::delete_entry(&root, Path::new(&path), to_trash).map(|_| ())
+}
+
+/// Shows a note or folder in the system file manager.
+#[tauri::command]
+fn reveal_entry(path: String, app: AppHandle, state: State<'_, AppState>) -> CmdResult<()> {
+    let root = current_root(&state)?;
+    let entry = if Path::new(&path) == root { root } else { goo_core::entry_inside(&root, Path::new(&path))? };
+    app.opener().reveal_item_in_dir(entry).map_err(|e| CoreError::new(ErrorCode::Io, e.to_string()))
+}
+
 #[derive(Serialize)]
 struct OpenRequest {
     workspace: WorkspaceInfo,
@@ -277,6 +321,11 @@ pub fn run() {
             open_external,
             take_open_request,
             drop_open_request,
+            rename_entry,
+            move_entry,
+            create_folder,
+            delete_entry,
+            reveal_entry,
             mcp::mcp_status,
             mcp::mcp_set_enabled,
             mcp::mcp_new_token,

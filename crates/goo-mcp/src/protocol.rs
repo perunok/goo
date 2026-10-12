@@ -14,7 +14,8 @@ Changes appear in the goo window at once. Prefer edit_note for small changes and
 Notes with unsaved edits in goo are never overwritten: if a write is refused, ask the user to save first. \
 Diagrams: goo renders ```mermaid code blocks; check them with check_mermaid after writing. \
 \"This note\" or \"the selection\" means get_open_note. If the folder syncs with goo cloud, writes are synced \
-automatically; sync_status lists conflicts to resolve. There is no delete tool.";
+automatically; sync_status lists conflicts to resolve. move_note renames or moves a note; delete_note moves one to \
+the system trash: ask the user before deleting.";
 
 pub const PARSE_ERROR: i64 = -32700;
 pub const INVALID_REQUEST: i64 = -32600;

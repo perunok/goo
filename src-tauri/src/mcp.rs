@@ -52,6 +52,15 @@ impl Host for AppHost {
         let _ = self.0.emit("mcp-activity", tool);
     }
 
+    fn trash(&self, path: &Path) -> std::io::Result<()> {
+        crate::to_trash(path)
+    }
+
+    fn moved(&self, root: &Path, from: &Path, to: &Path) {
+        let _ = self.0.emit("files-moved", json!({ "root": root.to_string_lossy(), "from": from.to_string_lossy(), "to": to.to_string_lossy() }));
+        self.changed(root, &[to.to_path_buf()]);
+    }
+
     fn open_note(&self) -> Result<Value, String> {
         crate::uibridge::ask(&self.0, "open_note", Value::Null, Duration::from_secs(5))
     }

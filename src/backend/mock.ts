@@ -17,6 +17,8 @@ export function createMockBackend(opts: { latencyMs?: number; files?: Record<str
   const root = opts.root ?? SEED_ROOT
   const files = new Map<string, string>(Object.entries(opts.files ?? SEED_FILES).map(([rel, text]) => [`${root}/${rel}`, text]))
   const workspace: Workspace = { root, name: root.split('/').pop()! }
+  /** Empty folders (folders with notes come from the note paths). */
+  const folders = new Set<string>()
   let open: Workspace | null = null
   // MCP needs the desktop app; the browser mock only shows the settings UI.
   const mcp: McpStatus = {
@@ -52,6 +54,33 @@ export function createMockBackend(opts: { latencyMs?: number; files?: Record<str
     return path
   }
 
+  const validName = (name: string) => {
+    const n = name.trim()
+    if (!n || /[/\\:*?"<>|]/.test(n) || n === '.' || n === '..') fail('invalid_name', `"${name}" is not a valid name`)
+    return n
+  }
+  const exists = (path: string) =>
+    files.has(path) || folders.has(path) || [...files.keys(), ...folders].some((p) => p.startsWith(path + '/'))
+
+  /** Renames/moves a note or a whole folder (every path under it). */
+  function relocate(from: string, to: string): string {
+    if (to === from) return to
+    if (exists(to) && to.toLowerCase() !== from.toLowerCase()) fail('already_exists', `${to} already exists`)
+    for (const [p, text] of [...files]) {
+      if (p === from || p.startsWith(from + '/')) {
+        files.delete(p)
+        files.set(to + p.slice(from.length), text)
+      }
+    }
+    for (const f of [...folders]) {
+      if (f === from || f.startsWith(from + '/')) {
+        folders.delete(f)
+        folders.add(to + f.slice(from.length))
+      }
+    }
+    return to
+  }
+
   function tree(): Tree {
     const top: TreeNode[] = []
     const dirs = new Map<string, TreeNode>()
@@ -70,6 +99,7 @@ export function createMockBackend(opts: { latencyMs?: number; files?: Record<str
       const parent = path.slice(0, path.lastIndexOf('/'))
       dirNode(parent).push({ name: path.slice(parent.length + 1), path, kind: 'file' })
     }
+    for (const dir of folders) dirNode(dir)
     const sort = (nodes: TreeNode[]) => {
       nodes.sort((a, b) => (a.kind === b.kind ? a.name.toLowerCase().localeCompare(b.name.toLowerCase()) : a.kind === 'dir' ? -1 : 1))
       for (const n of nodes) if (n.children) sort(n.children)
@@ -121,6 +151,38 @@ export function createMockBackend(opts: { latencyMs?: number; files?: Record<str
       files.set(path, contents)
       return path
     },
+    async renameEntry(path, newName) {
+      await wait()
+      const n = validName(newName)
+      const parent = inside(path).slice(0, path.lastIndexOf('/'))
+      const isNote = files.has(path)
+      const to = `${parent}/${isNote && !MD.test(n) ? `${n}.md` : n}`
+      return relocate(path, to)
+    },
+    async moveEntry(path, destDir) {
+      await wait()
+      inside(path)
+      if (destDir !== open!.root) inside(destDir)
+      if (destDir === path || destDir.startsWith(path + '/')) fail('invalid_name', 'a folder cannot move into itself')
+      return relocate(path, `${destDir}/${path.slice(path.lastIndexOf('/') + 1)}`)
+    },
+    async createFolder(dir, name) {
+      await wait()
+      const n = validName(name)
+      const path = `${dir === open?.root ? dir : inside(dir)}/${n}`
+      if (exists(path)) fail('already_exists', `${path} already exists`)
+      folders.add(path)
+      return path
+    },
+    async deleteEntry(path) {
+      await wait()
+      inside(path)
+      if (!exists(path)) fail('not_found', `${path} does not exist`)
+      for (const p of [...files.keys()]) if (p === path || p.startsWith(path + '/')) files.delete(p)
+      for (const f of [...folders]) if (f === path || f.startsWith(path + '/')) folders.delete(f)
+    },
+    async revealEntry() {},
+    onFilesMoved() {},
     async openExternal(url) {
       window.open(url, '_blank', 'noopener,noreferrer')
     },

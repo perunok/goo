@@ -50,6 +50,10 @@ npm run app:build      # installers
   unrelated package `goo` with a higher version that unattended-upgrades would install over ours). macOS/Windows keep
   `goo`; the launcher still shows "goo" (`Name=goo` in `src-tauri/linux/goo.desktop`); the app id and config dir are
   unchanged. Release file names stay `goo-<version>-<os>-<arch>` (from the base `tauri.conf.json`).
+- File management: `goo_core::{rename_entry, move_entry, move_note_to, create_folder, delete_entry, entry_inside}`
+  (entries are handled as links, never followed; deletes go through a remover = `trash::delete` in the app). The tree
+  lists empty folders. UI: `features/files/` (right-click `ContextMenu`, drag-and-drop via `dnd.ts`, F2/Del);
+  `workspace.retarget()` moves open tabs with renamed/moved notes (also on the MCP `files-moved` event).
 - UI talks to the outside only through `GooBackend` (`src/backend/types.ts`). Adding a command touches:
   goo-core (+ test) -> `src-tauri/src/lib.rs` (+ `generate_handler!`) -> `types.ts` -> `tauri.ts` -> `mock.ts`.
   Window-level JS APIs need a permission in `src-tauri/capabilities/default.json`.
