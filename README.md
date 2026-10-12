@@ -11,6 +11,10 @@ Plain Markdown, your folders, your colours: read [the Goo Manifesto](#manifesto)
 **Download:** [latest release](https://github.com/perunok/goo/releases/latest): Linux (`.deb`, `.rpm`, AppImage;
 x64 and arm64), macOS (`.dmg`; Apple silicon and Intel), Windows (`.exe`, `.msi`).
 
+On Linux the package and command are called **`goo-notes`** (Debian/Ubuntu already have an unrelated package `goo`, the
+GOO programming language). If you installed goo 0.1–0.3 from a `.deb`, Ubuntu's automatic updates may have replaced it
+with that package: install `goo-notes` and remove the other one with `sudo apt remove goo`.
+
 ## Screenshots
 
 | | |
@@ -40,7 +44,7 @@ Regenerate them with `npm run dev` and `npm run screenshots`.
 - **Notices outside changes**: when another program (another editor, `git pull`, Claude Code, a sync tool) changes a
   note, goo reloads it and refreshes the tree. If you have unsaved edits they stay, and saving asks whether to keep
   yours or load theirs.
-- **Open with goo** from any file manager (or `goo notes.md`): the note opens in its folder; a selection of notes opens
+- **Open with goo** from any file manager (or `goo-notes notes.md` on Linux): the note opens in its folder; a selection of notes opens
   as tabs in the one goo window.
 - **Reading width**: narrow, medium, wide or full, for the preview and the editor.
 - **Links between notes**: `[see this](../other.md#section)` opens the other note and scrolls to the heading. Web
@@ -58,7 +62,8 @@ Regenerate them with `npm run dev` and `npm run screenshots`.
 
 goo has a built-in [MCP](https://modelcontextprotocol.io) server, **off until you turn it on** in Settings > AI
 assistants (MCP). There you can connect Claude Code with one click, or copy a ready-made config for Claude Desktop,
-Cursor, Windsurf, VS Code or any Streamable-HTTP client. Assistants run `goo --mcp-stdio`, which talks to the open goo
+Cursor, Windsurf, VS Code or any Streamable-HTTP client. Assistants run `goo-notes --mcp-stdio` (Linux; `goo` on macOS and
+Windows), which talks to the open goo
 (and starts it if it is closed).
 
 | Tool | What it does |

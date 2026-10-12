@@ -113,6 +113,7 @@ jobs:
           Download the installer for your system below.
 
           - **Linux**: `.AppImage` (any distro: `chmod +x` and run), `.deb` (Debian/Ubuntu), `.rpm` (Fedora/openSUSE); `amd64`/`x86_64` = Intel/AMD, `arm64`/`aarch64` = ARM
+            The Linux package and command are called `goo-notes` (Ubuntu's unrelated `goo` package is a programming language).
           - **macOS**: `.dmg` (`arm64` = Apple silicon, `x64` = Intel). Unsigned: right-click the app > Open the first time.
           - **Windows**: `.exe` (installer) or `.msi`. Unsigned: SmartScreen > More info > Run anyway.
           EOF
