@@ -1,6 +1,6 @@
 {
   "name": "goo",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "private": true,
   "description": "goo: a small, local-first Markdown editor with Mermaid diagrams, themes and accent colours.",
   "license": "MIT",
