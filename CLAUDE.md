@@ -46,6 +46,10 @@ npm run app:build      # installers
   `get_open_note` (text incl. unsaved edits + selection from `components/editor/selection.ts`) and `check_mermaid`
   (`mermaidError` in `mermaid.ts`). Answers live in `src/app/uiQueries.ts`.
 - `npm run screenshots` (with `npm run dev` running) regenerates `docs/screenshots/` via Playwright.
+- Linux packaging: `src-tauri/tauri.linux.conf.json` makes the package and binary `goo-notes` (Debian/Ubuntu ship an
+  unrelated package `goo` with a higher version that unattended-upgrades would install over ours). macOS/Windows keep
+  `goo`; the launcher still shows "goo" (`Name=goo` in `src-tauri/linux/goo.desktop`); the app id and config dir are
+  unchanged. Release file names stay `goo-<version>-<os>-<arch>` (from the base `tauri.conf.json`).
 - UI talks to the outside only through `GooBackend` (`src/backend/types.ts`). Adding a command touches:
   goo-core (+ test) -> `src-tauri/src/lib.rs` (+ `generate_handler!`) -> `types.ts` -> `tauri.ts` -> `mock.ts`.
   Window-level JS APIs need a permission in `src-tauri/capabilities/default.json`.
