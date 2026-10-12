@@ -1,6 +1,6 @@
 [package]
 name = "goo"
-version = "0.3.1"
+version = "0.4.0"
 description = "goo: a small, local-first Markdown editor"
 edition = "2021"
 license = "MIT"
