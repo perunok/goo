@@ -5,7 +5,7 @@
 //! - Only folders from goo's recent list (picked by the user in the app) are reachable; paths are workspace-relative
 //!   and checked with goo-core's path guard (no `..`, symlinks resolved).
 //! - Notes with unsaved edits in the window are never written; the assistant is told to ask the user to save first.
-//! - Nothing is deleted: there is no delete tool.
+//! - Deleting only moves a note to the system trash (recoverable), and is marked destructive so clients ask first.
 
 use goo_core::CoreError;
 use serde_json::{json, Map, Value};
@@ -21,7 +21,8 @@ pub trait Host: Send + Sync {
     fn unsaved(&self) -> Vec<PathBuf>;
     /// Notes were created or changed on disk.
     fn changed(&self, root: &Path, files: &[PathBuf]);
-    /// Show these notes in the window.
+    /// Show these in the window: the first path decides the folder (a folder, or a note's own folder), the notes
+    /// among them open as tabs.
     fn open_in_app(&self, files: Vec<PathBuf>);
     /// A tool is running (for the status bar).
     fn activity(&self, _tool: &str) {}
@@ -37,6 +38,14 @@ pub trait Host: Send + Sync {
     /// goo cloud state of a folder (`{linked: false}` when it does not sync).
     fn sync_status(&self, _root: &Path) -> Result<Value, String> {
         Ok(json!({ "linked": false }))
+    }
+    /// Moves a file to the system trash (the app); tests remove it.
+    fn trash(&self, _path: &Path) -> std::io::Result<()> {
+        Err(std::io::Error::other("deleting is not available"))
+    }
+    /// A note was renamed or moved: open tabs follow it.
+    fn moved(&self, root: &Path, from: &Path, to: &Path) {
+        self.changed(root, &[from.to_path_buf(), to.to_path_buf()]);
     }
     /// Syncs a linked folder now and waits for the result (same shape as `sync_status`).
     fn sync_now(&self, _root: &Path) -> Result<Value, String> {
@@ -189,6 +198,32 @@ pub fn tools() -> Vec<ToolSpec> {
             description: "Opens a note in the goo window so the user can see it (switching folder if needed).",
             read_only: false,
             destructive: false,
+            open_world: false,
+            input: || schema(json!({ "path": { "type": "string", "description": PATH_PROP } }), &["path"]),
+        },
+        ToolSpec {
+            name: "move_note",
+            title: "Rename or move a note",
+            description: "Renames and/or moves a note to a new path in the same folder (missing folders are created; \".md\" is added if missing). Fails if the target exists. Refused while the note has unsaved edits in goo.",
+            read_only: false,
+            destructive: false,
+            open_world: false,
+            input: || {
+                schema(
+                    json!({
+                        "path": { "type": "string", "description": PATH_PROP },
+                        "to": { "type": "string", "description": "The new path relative to the folder, e.g. \"archive/2026/plan.md\"." }
+                    }),
+                    &["path", "to"],
+                )
+            },
+        },
+        ToolSpec {
+            name: "delete_note",
+            title: "Delete a note (to the trash)",
+            description: "Moves a note to the system trash, where the user can restore it. Ask the user before deleting. Refused while the note has unsaved edits in goo.",
+            read_only: false,
+            destructive: true,
             open_world: false,
             input: || schema(json!({ "path": { "type": "string", "description": PATH_PROP } }), &["path"]),
         },
@@ -451,10 +486,30 @@ pub fn call(host: &dyn Host, name: &str, args: &Value) -> ToolResult {
         "open_in_app" => {
             let root = workspace(host, a)?;
             let file = goo_core::resolve_note(&root, req_str(a, "path")?).map_err(err)?;
-            host.open_in_app(vec![file.clone()]);
+            // the folder first: goo opens that folder (not the note's own subfolder) and the note in it
+            host.open_in_app(vec![root.clone(), file.clone()]);
             Ok(ToolOutput::data(json!({ "opened": goo_core::relative_string(&root, &file) })))
         }
-"get_open_note" => {
+"move_note" => {
+            let root = workspace(host, a)?;
+            let file = goo_core::resolve_note(&root, req_str(a, "path")?).map_err(err)?;
+            refuse_unsaved(host, &root, &file)?;
+            let to = goo_core::move_note_to(&root, &file, req_str(a, "to")?).map_err(err)?;
+            host.moved(&root, &file, &to);
+            Ok(ToolOutput::data(json!({
+                "moved": goo_core::relative_string(&root, &file),
+                "to": goo_core::relative_string(&root, &to)
+            })))
+        }
+        "delete_note" => {
+            let root = workspace(host, a)?;
+            let file = goo_core::resolve_note(&root, req_str(a, "path")?).map_err(err)?;
+            refuse_unsaved(host, &root, &file)?;
+            let gone = goo_core::delete_entry(&root, &file, |p| host.trash(p)).map_err(err)?;
+            host.changed(&root, std::slice::from_ref(&gone));
+            Ok(ToolOutput::data(json!({ "deleted": goo_core::relative_string(&root, &gone), "where": "the system trash" })))
+        }
+        "get_open_note" => {
             let note = host.open_note()?;
             let Some(path) = note.get("path").and_then(Value::as_str).map(PathBuf::from) else {
                 return Ok(ToolOutput::data(json!({ "open": false, "message": "No note is open in goo." })));

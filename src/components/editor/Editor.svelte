@@ -98,6 +98,11 @@
     const id = docId
     const value = text
     if (!view || id === currentId) return
+    // The open note was renamed or moved (its old id is gone, same text): keep its state, undo history included.
+    if (!openIds.includes(currentId) && !states.has(id) && view.state.doc.toString() === value) {
+      currentId = id
+      return
+    }
     states.set(currentId, view.state)
     for (const k of states.keys()) if (!openIds.includes(k)) states.delete(k)
     currentId = id

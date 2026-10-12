@@ -41,6 +41,9 @@ impl Host for FakeHost {
     fn activity(&self, tool: &str) {
         self.activity.lock().unwrap().push(tool.into());
     }
+    fn trash(&self, path: &Path) -> std::io::Result<()> {
+        std::fs::remove_file(path)
+    }
     fn open_note(&self) -> Result<Value, String> {
         self.screen.clone().ok_or_else(|| "goo's window is not available".into())
     }
@@ -111,7 +114,7 @@ fn tools_are_listed_with_schemas_and_hints() {
         names,
         [
             "list_workspaces", "list_notes", "read_note", "search_notes", "create_note", "write_note", "edit_note", "append_to_note",
-            "open_in_app", "get_open_note", "check_mermaid", "sync_status", "sync_now"
+            "open_in_app", "move_note", "delete_note", "get_open_note", "check_mermaid", "sync_status", "sync_now"
         ]
     );
     for t in tools {
@@ -175,7 +178,7 @@ fn writes_report_changes_and_respect_unsaved_notes() {
 
     let (e, _, _) = call(&host, "open_in_app", json!({"path": "projects/plan.md"}));
     assert!(!e);
-    assert_eq!(host.opened.lock().unwrap()[0], root.join("projects/plan.md"));
+    assert_eq!(*host.opened.lock().unwrap(), [root.clone(), root.join("projects/plan.md")]);
 }
 
 #[test]
@@ -485,4 +488,33 @@ fn sync_tools_default_to_not_linked() {
     assert_eq!(data["linked"], false);
     let (e, msg, _) = call(&host, "sync_now", json!({}));
     assert!(e && msg.contains("does not sync"), "{msg}");
+}
+
+#[test]
+fn notes_can_be_moved_and_deleted_but_not_with_unsaved_edits() {
+    let (_d, root) = workspace();
+    let mut host = host_for(&root);
+    let (e, _, data) = call(&host, "move_note", json!({"path": "todo.md", "to": "archive/2026/todo-done"}));
+    assert!(!e);
+    assert_eq!(data, json!({"moved": "todo.md", "to": "archive/2026/todo-done.md"}));
+    assert!(root.join("archive/2026/todo-done.md").exists());
+    // the window hears about both paths (old tab follows the note)
+    assert_eq!(host.changed.lock().unwrap().len(), 2);
+    let (e, msg, _) = call(&host, "move_note", json!({"path": "projects/plan.md", "to": "archive/2026/todo-done.md"}));
+    assert!(e && msg.contains("already exists"), "{msg}");
+
+    let (e, _, data) = call(&host, "delete_note", json!({"path": "archive/2026/todo-done.md"}));
+    assert!(!e);
+    assert_eq!(data["where"], "the system trash");
+    assert!(!root.join("archive/2026/todo-done.md").exists());
+
+    host.unsaved = vec![root.join("projects/plan.md")];
+    for (tool, args) in [("delete_note", json!({"path": "projects/plan.md"})), ("move_note", json!({"path": "projects/plan.md", "to": "x.md"}))] {
+        let (e, msg, _) = call(&host, tool, args);
+        assert!(e && msg.contains("unsaved"), "{tool}: {msg}");
+    }
+    assert!(root.join("projects/plan.md").exists());
+    let list = protocol::tool_list();
+    let delete = list["tools"].as_array().unwrap().iter().find(|t| t["name"] == "delete_note").unwrap().clone();
+    assert_eq!(delete["annotations"]["destructiveHint"], true);
 }

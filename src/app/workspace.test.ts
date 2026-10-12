@@ -90,3 +90,70 @@ describe('notes changed outside goo', () => {
     expect(doc().diskChanged).toBe(true)
   })
 })
+
+describe('file management', () => {
+  beforeEach(async () => {
+    if (!workspace.workspace) await workspace.pickFolder()
+    for (const d of [...workspace.docs]) {
+      d.text = d.savedText
+      await workspace.close(d.path)
+    }
+  })
+
+  const answerPrompt = async (value: string | null) => {
+    for (let i = 0; i < 20 && !ui.promptRequest; i++) await new Promise((r) => setTimeout(r, 5))
+    ui.promptRequest!.resolve(value)
+  }
+  const node = (path: string, kind: 'file' | 'dir' = 'file') => ({ name: path.split('/').pop()!, path, kind, children: kind === 'dir' ? [] : undefined })
+
+  it('renaming an open note keeps the tab and its unsaved edits', async () => {
+    outside(`${ROOT}/draft.md`, '# Draft\n')
+    await workspace.openFile(`${ROOT}/draft.md`)
+    workspace.setText(`${ROOT}/draft.md`, '# Draft\nunsaved')
+    const renaming = workspace.renameEntry(node(`${ROOT}/draft.md`))
+    await answerPrompt('final')
+    await renaming
+    const d = workspace.docs.find((x) => x.name === 'final.md')!
+    expect(d.path).toBe(`${ROOT}/final.md`)
+    expect(d.text).toBe('# Draft\nunsaved')
+    expect(workspace.activePath).toBe(`${ROOT}/final.md`)
+    expect(files.has(`${ROOT}/final.md`)).toBe(true)
+  })
+
+  it('moving a folder moves the open notes inside it', async () => {
+    await workspace.openFile(`${ROOT}/projects/goo/ideas.md`)
+    await workspace.moveEntry(`${ROOT}/projects/goo`, `${ROOT}/journal`)
+    expect(workspace.docs[0]!.path).toBe(`${ROOT}/journal/goo/ideas.md`)
+    expect(files.has(`${ROOT}/journal/goo/ideas.md`)).toBe(true)
+  })
+
+  it('new folders show in the tree even while empty', async () => {
+    const making = workspace.newFolder()
+    await answerPrompt('Archive')
+    await making
+    expect(workspace.tree!.nodes.some((n) => n.kind === 'dir' && n.name === 'Archive')).toBe(true)
+  })
+
+  it('deleting asks, mentions unsaved edits, and closes the notes inside', async () => {
+    outside(`${ROOT}/gone/a.md`, 'a')
+    await workspace.refreshTree()
+    await workspace.openFile(`${ROOT}/gone/a.md`)
+    workspace.setText(`${ROOT}/gone/a.md`, 'edited')
+    const deleting = workspace.deleteEntry({ ...node(`${ROOT}/gone`, 'dir'), children: [node(`${ROOT}/gone/a.md`)] })
+    for (let i = 0; i < 20 && !ui.confirmRequest; i++) await new Promise((r) => setTimeout(r, 5))
+    expect(ui.confirmRequest!.message).toContain('Unsaved edits in a.md will be lost')
+    ui.confirmRequest!.resolve('delete')
+    await deleting
+    expect(files.has(`${ROOT}/gone/a.md`)).toBe(false)
+    expect(workspace.docs.some((d) => d.path.startsWith(`${ROOT}/gone`))).toBe(false)
+  })
+
+  it('cancelling a delete keeps everything', async () => {
+    outside(`${ROOT}/keep.md`, 'k')
+    const deleting = workspace.deleteEntry(node(`${ROOT}/keep.md`))
+    for (let i = 0; i < 20 && !ui.confirmRequest; i++) await new Promise((r) => setTimeout(r, 5))
+    ui.confirmRequest!.resolve('cancel')
+    await deleting
+    expect(files.has(`${ROOT}/keep.md`)).toBe(true)
+  })
+})

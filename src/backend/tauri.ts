@@ -15,6 +15,14 @@ export const tauriBackend: GooBackend = {
   writeFile: (path, contents) => invoke<void>('write_file', { path, contents }),
   createFile: (dir, name, contents) => invoke<string>('create_file', { dir, name, contents }),
   openExternal: (url) => invoke<void>('open_external', { url }),
+  renameEntry: (path, newName) => invoke<string>('rename_entry', { path, newName }),
+  moveEntry: (path, destDir) => invoke<string>('move_entry', { path, destDir }),
+  createFolder: (dir, name) => invoke<string>('create_folder', { dir, name }),
+  deleteEntry: (path) => invoke<void>('delete_entry', { path }),
+  revealEntry: (path) => invoke<void>('reveal_entry', { path }),
+  onFilesMoved(handler) {
+    void listen<{ root: string; from: string; to: string }>('files-moved', (e) => handler(e.payload))
+  },
   setWindowTitle: (title) => getCurrentWindow().setTitle(title),
   guardClose(hasUnsaved, ask) {
     // The window closes after the handler unless it calls preventDefault (needs core:window:allow-destroy).

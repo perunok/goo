@@ -21,6 +21,8 @@ goo-mcp = { path = "../crates/goo-mcp" }
 goo-sync = { path = "../crates/goo-sync" }
 # notices changes made outside goo in the open folder
 notify-debouncer-mini = "0.7"
+# deleting a note or folder moves it to the system trash
+trash = "5"
 # goo cloud tokens live in the OS keychain (macOS Keychain, Windows Credential Manager, Secret Service on Linux)
 keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service", "crypto-rust"] }
 tauri = { version = "2", features = [] }

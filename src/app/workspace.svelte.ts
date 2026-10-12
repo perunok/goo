@@ -4,7 +4,7 @@
  */
 import type { FilesChanged, OpenEvent, OpenRequest, Tree, TreeNode, Workspace } from '../backend/types'
 import { errorMessage, isBackendError } from '../backend/types'
-import { basename, relativeTo, stem } from '../lib/paths'
+import { basename, dirname, relativeTo, sepOf, stem } from '../lib/paths'
 import { backend } from './backend'
 import { ui } from './ui.svelte'
 
@@ -65,6 +65,9 @@ class WorkspaceStore {
       (message) => ui.toast(message, 'error'),
     )
     backend.onFilesChanged((e) => void this.handleFilesChanged(e))
+    backend.onFilesMoved((e) => {
+      if (this.workspace && e.root === this.workspace.root) this.retarget(e.from, e.to)
+    })
     backend.onMcpActivity((tool) => ui.assistantBusy(tool))
     await this.loadRecents()
     // Started with a file or folder ("Open with goo", `goo notes.md`): that wins over the last session.
@@ -337,6 +340,126 @@ class WorkspaceStore {
     if (this.docs.length < 2) return
     const i = this.docs.findIndex((d) => d.path === this.activePath)
     this.select(this.docs[(i + delta + this.docs.length) % this.docs.length]!.path)
+  }
+
+  // -------------------------------------------------------------------------
+  // File management
+  // -------------------------------------------------------------------------
+
+  /**
+   * A note or folder moved from `from` to `to`: open tabs inside it follow (unsaved edits included), and so do the
+   * active tab and the collapsed folders.
+   */
+  retarget(from: string, to: string) {
+    const sep = sepOf(from)
+    const moved = (p: string) => (p === from ? to : p.startsWith(from + sep) ? to + p.slice(from.length) : null)
+    for (const d of this.docs) {
+      const next = moved(d.path)
+      if (next) {
+        d.path = next
+        d.name = basename(next)
+      }
+    }
+    const active = this.activePath && moved(this.activePath)
+    if (active) this.activePath = active
+    this.collapsed = new Set([...this.collapsed].map((c) => moved(c) ?? c))
+    this.persist()
+  }
+
+  /** Paths of the open notes inside `path` (the note itself, or everything under a folder). */
+  private docsUnder(path: string): Doc[] {
+    const sep = sepOf(path)
+    return this.docs.filter((d) => d.path === path || d.path.startsWith(path + sep))
+  }
+
+  async renameEntry(node: TreeNode) {
+    const isNote = node.kind === 'file'
+    const name = await ui.prompt({
+      title: isNote ? 'Rename note' : 'Rename folder',
+      label: `New name for ${node.name}`,
+      value: isNote ? stem(node.name) : node.name,
+      confirmLabel: 'Rename',
+    })
+    if (name === null || name === (isNote ? stem(node.name) : node.name)) return
+    try {
+      const to = await backend.renameEntry(node.path, name)
+      this.retarget(node.path, to)
+      await this.refreshTree()
+    } catch (e) {
+      ui.toast(errorMessage(e), 'error')
+    }
+  }
+
+  async moveEntry(path: string, destDir: string) {
+    if (dirname(path) === destDir) return
+    try {
+      const to = await backend.moveEntry(path, destDir)
+      this.retarget(path, to)
+      const open = new Set(this.collapsed)
+      open.delete(destDir)
+      this.collapsed = open
+      await this.refreshTree()
+    } catch (e) {
+      ui.toast(errorMessage(e), 'error')
+    }
+  }
+
+  async newFolder(dir?: string) {
+    const ws = this.workspace
+    if (!ws) return
+    const target = dir ?? ws.root
+    const name = await ui.prompt({ title: 'New folder', label: `In ${relativeTo(ws.root, target) === target ? ws.name : `${ws.name}/${relativeTo(ws.root, target)}`}`, value: 'New folder', confirmLabel: 'Create' })
+    if (name === null) return
+    try {
+      await backend.createFolder(target, name)
+      const open = new Set(this.collapsed)
+      open.delete(target)
+      this.collapsed = open
+      await this.refreshTree()
+    } catch (e) {
+      ui.toast(errorMessage(e), 'error')
+    }
+  }
+
+  /** Moves a note or folder to the system trash after asking. Open notes inside it are closed. */
+  async deleteEntry(node: TreeNode) {
+    const isNote = node.kind === 'file'
+    const affected = this.docsUnder(node.path)
+    const unsaved = affected.filter(isDirty)
+    const count = isNote ? 1 : flattenFiles(node.children ?? []).length
+    const lines = [
+      isNote ? `${node.name} goes to the system trash, where you can restore it.` : `The folder ${node.name} and the ${count} note${count === 1 ? '' : 's'} in it go to the system trash, where you can restore them.`,
+    ]
+    if (unsaved.length) lines.push(`Unsaved edits in ${unsaved.map((d) => d.name).join(', ')} will be lost.`)
+    const choice = await ui.confirm({
+      title: isNote ? `Delete ${node.name}?` : `Delete the folder ${node.name}?`,
+      message: lines.join(' '),
+      actions: [
+        { id: 'delete', label: 'Move to trash', kind: 'danger' },
+        { id: 'cancel', label: 'Cancel' },
+      ],
+    })
+    if (choice !== 'delete') return
+    try {
+      await backend.deleteEntry(node.path)
+    } catch (e) {
+      ui.toast(errorMessage(e), 'error')
+      return
+    }
+    for (const d of affected) {
+      d.text = d.savedText // already confirmed: close without asking again
+      await this.close(d.path)
+    }
+    await this.refreshTree()
+    ui.toast(`${node.name} moved to the trash.`)
+  }
+
+  async revealEntry(path: string) {
+    try {
+      await backend.revealEntry(path)
+    } catch (e) {
+      ui.toast(errorMessage(e), 'error')
+    }
   }
 
   /** Asks for a name and creates a note in `dir` (default: the folder's root). */

@@ -264,3 +264,81 @@ fn watched_changes_follow_the_tree_filters() {
     }
     assert_eq!(classify_change(&root, Path::new("/elsewhere/x.md")), WatchedChange::Ignore);
 }
+
+#[test]
+fn empty_folders_are_listed_but_not_folders_of_other_files() {
+    let (_d, root) = ws();
+    fs::create_dir_all(root.join("new folder")).unwrap();
+    touch(&root.join("images/a.png"), "");
+    let names: Vec<_> = list_tree(&root).unwrap().nodes.into_iter().map(|n| n.name).collect();
+    assert_eq!(names, ["new folder"]);
+}
+
+#[test]
+fn rename_keeps_notes_markdown_and_never_overwrites() {
+    let (_d, root) = ws();
+    touch(&root.join("a.md"), "A");
+    touch(&root.join("b.md"), "B");
+    fs::create_dir_all(root.join("dir")).unwrap();
+    assert_eq!(rename_entry(&root, &root.join("a.md"), "plan").unwrap(), root.join("plan.md"));
+    assert_eq!(read_text(&root.join("plan.md")).unwrap(), "A");
+    assert_eq!(rename_entry(&root, &root.join("plan.md"), "b.md").unwrap_err().code, ErrorCode::AlreadyExists);
+    assert_eq!(read_text(&root.join("b.md")).unwrap(), "B");
+    // case-only rename works (also on case-insensitive disks)
+    assert_eq!(rename_entry(&root, &root.join("plan.md"), "Plan.md").unwrap(), root.join("Plan.md"));
+    assert!(root.join("Plan.md").exists());
+    // folders keep their name as given
+    assert_eq!(rename_entry(&root, &root.join("dir"), "Projects").unwrap(), root.join("Projects"));
+    // bad names and the root itself
+    assert!(rename_entry(&root, &root.join("b.md"), "../x").is_err());
+    assert!(rename_entry(&root, &root, "x").is_err());
+}
+
+#[test]
+fn move_entry_stays_inside_and_not_into_itself() {
+    let (_d, root) = ws();
+    touch(&root.join("n.md"), "");
+    touch(&root.join("p/q/deep.md"), "");
+    fs::create_dir_all(root.join("dest")).unwrap();
+    assert_eq!(move_entry(&root, &root.join("n.md"), &root.join("dest")).unwrap(), root.join("dest/n.md"));
+    assert_eq!(move_entry(&root, &root.join("p"), &root.join("dest")).unwrap(), root.join("dest/p"));
+    assert!(root.join("dest/p/q/deep.md").exists());
+    assert_eq!(move_entry(&root, &root.join("dest"), &root.join("dest/p/q")).unwrap_err().code, ErrorCode::InvalidName);
+    touch(&root.join("n.md"), "again");
+    assert_eq!(move_entry(&root, &root.join("n.md"), &root.join("dest")).unwrap_err().code, ErrorCode::AlreadyExists);
+    let outside = tempfile::tempdir().unwrap();
+    assert_eq!(move_entry(&root, &root.join("n.md"), outside.path()).unwrap_err().code, ErrorCode::OutsideWorkspace);
+}
+
+#[test]
+fn move_note_to_renames_and_creates_folders() {
+    let (_d, root) = ws();
+    touch(&root.join("inbox.md"), "x");
+    assert_eq!(move_note_to(&root, &root.join("inbox.md"), "archive/2026/inbox-old").unwrap(), root.join("archive/2026/inbox-old.md"));
+    assert!(move_note_to(&root, &root.join("archive"), "x.md").is_err());
+    assert!(move_note_to(&root, &root.join("archive/2026/inbox-old.md"), "../escape.md").is_err());
+}
+
+#[test]
+fn folders_are_created_and_entries_deleted_inside_only() {
+    let (_d, root) = ws();
+    assert_eq!(create_folder(&root, &root, "ideas").unwrap(), root.join("ideas"));
+    assert_eq!(create_folder(&root, &root, "ideas").unwrap_err().code, ErrorCode::AlreadyExists);
+    touch(&root.join("ideas/x.md"), "");
+    let removed = delete_entry(&root, &root.join("ideas"), |p| fs::remove_dir_all(p)).unwrap();
+    assert_eq!(removed, root.join("ideas"));
+    assert!(!root.join("ideas").exists());
+    assert!(delete_entry(&root, &root, |_| panic!("never the root")).is_err());
+    assert_eq!(delete_entry(&root, &root.join("missing.md"), |_| Ok(())).unwrap_err().code, ErrorCode::NotFound);
+}
+
+#[cfg(unix)]
+#[test]
+fn a_symlinked_note_is_handled_as_the_link() {
+    let (_d, root) = ws();
+    touch(&root.join("real.md"), "keep me");
+    std::os::unix::fs::symlink(root.join("real.md"), root.join("link.md")).unwrap();
+    delete_entry(&root, &root.join("link.md"), |p| fs::remove_file(p)).unwrap();
+    assert!(!root.join("link.md").exists());
+    assert_eq!(read_text(&root.join("real.md")).unwrap(), "keep me");
+}

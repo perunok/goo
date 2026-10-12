@@ -124,6 +124,18 @@ export interface GooBackend {
   writeFile(path: string, contents: string): Promise<void>
   /** Creates a note (".md" appended when missing) and returns its path. */
   createFile(dir: string, name: string, contents: string): Promise<string>
+  /** Renames a note or folder where it is (notes keep ".md"); returns the new path. */
+  renameEntry(path: string, newName: string): Promise<string>
+  /** Moves a note or folder into another folder; returns the new path. */
+  moveEntry(path: string, destDir: string): Promise<string>
+  /** Makes an empty folder; returns its path. */
+  createFolder(dir: string, name: string): Promise<string>
+  /** Moves a note or folder to the system trash. */
+  deleteEntry(path: string): Promise<void>
+  /** Shows a note or folder in the system file manager. */
+  revealEntry(path: string): Promise<void>
+  /** A note was renamed or moved outside the editor (by an AI assistant): open tabs follow it. */
+  onFilesMoved(handler: (e: { root: string; from: string; to: string }) => void): void
   /** Opens an http(s)/mailto link outside the app. */
   openExternal(url: string): Promise<void>
   setWindowTitle(title: string): Promise<void>
