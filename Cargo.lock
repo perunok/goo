@@ -1474,6 +1474,7 @@ dependencies = [
  "goo-core",
  "goo-mcp",
  "goo-sync",
+ "goo-update",
  "keyring",
  "notify-debouncer-mini",
  "serde",
@@ -1523,6 +1524,19 @@ dependencies = [
  "unicode-normalization",
  "ureq",
  "uuid",
+]
+
+[[package]]
+name = "goo-update"
+version = "0.1.0"
+dependencies = [
+ "semver",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "tiny_http",
+ "ureq",
 ]
 
 [[package]]

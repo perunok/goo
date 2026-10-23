@@ -6,6 +6,7 @@ import type { FilesChanged, OpenEvent, OpenRequest, Tree, TreeNode, Workspace } 
 import { errorMessage, isBackendError } from '../backend/types'
 import { basename, dirname, relativeTo, sepOf, stem } from '../lib/paths'
 import { backend } from './backend'
+import { settings } from './settings.svelte'
 import { ui } from './ui.svelte'
 
 export interface Doc {
@@ -73,7 +74,8 @@ class WorkspaceStore {
     // Started with a file or folder ("Open with goo", `goo notes.md`): that wins over the last session.
     if (await this.takeOpenRequest()) return
     // Otherwise reopen where the user left off (only folders from the recent list are accepted by the backend).
-    const last = readLast()
+    // (turned off in Settings: nothing is restored, and the stored session is cleared below)
+    const last = settings.ui.restoreSession ? readLast() : null
     if (last && this.recents.some((r) => r.root === last.root)) {
       if (await this.openRecent(last.root, false)) {
         for (const p of last.open) await this.openFile(p, { quiet: true, activate: false })

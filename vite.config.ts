@@ -1,6 +1,7 @@
 /// <reference types="vitest/config" />
 import { defineConfig } from 'vite'
 import { svelte } from '@sveltejs/vite-plugin-svelte'
+import { svelteTesting } from '@testing-library/svelte/vite'
 import { readFileSync } from 'node:fs'
 
 // Tauri sets TAURI_ENV_* while running `tauri dev` / `tauri build`. Without it this is the browser dev mode,
@@ -10,7 +11,8 @@ const host = process.env.TAURI_DEV_HOST
 const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')) as { version: string }
 
 export default defineConfig({
-  plugins: [svelte()],
+  // svelteTesting(): tests render components with Svelte's browser build and clean up after each test
+  plugins: [svelte(), svelteTesting()],
   define: { __APP_VERSION__: JSON.stringify(pkg.version) },
   clearScreen: false,
   server: {
@@ -31,6 +33,7 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     include: ['src/**/*.test.ts', 'scripts/**/*.test.ts'],
+    setupFiles: ['src/test/setup.ts'],
     globals: true,
   },
 })

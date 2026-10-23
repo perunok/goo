@@ -111,6 +111,39 @@ export interface CloudWorkspace {
   role: string
 }
 
+/** In-app updates (src-tauri/src/update.rs, crates/goo-update). */
+export interface ReleaseInfo {
+  version: string
+  /** The release page on GitHub. */
+  url: string
+  /** Unix seconds. */
+  publishedAt: number | null
+}
+
+export interface UpdateCheckResult {
+  currentVersion: string
+  /** null: no release has been published yet. */
+  latest: ReleaseInfo | null
+  updateAvailable: boolean
+  /** Unix seconds. */
+  checkedAt: number
+}
+
+export type UpdateMethod = 'appimage' | 'deb' | 'nsis' | 'dmg'
+export type UpdatePhase = 'idle' | 'downloading' | 'verifying' | 'ready' | 'installing' | 'error'
+
+export interface UpdateInstallState {
+  /** How this installation updates itself; null: it cannot (see unsupportedReason). */
+  method: UpdateMethod | null
+  unsupportedReason: string | null
+  phase: UpdatePhase
+  version: string | null
+  received: number
+  total: number | null
+  bytesPerSec: number | null
+  error: string | null
+}
+
 export interface GooBackend {
   readonly kind: 'tauri' | 'mock'
   /** Native folder picker; null when cancelled. */
@@ -172,6 +205,15 @@ export interface GooBackend {
   cloudUnlink(root: string): Promise<CloudStatus>
   /** Sync soon (after a save: that folder; no root: every linked folder). */
   cloudSyncNow(root?: string): Promise<void>
+  /** One GET to GitHub's latest-release endpoint; downloads nothing. */
+  checkForUpdates(): Promise<UpdateCheckResult>
+  updateInstallState(): Promise<UpdateInstallState>
+  /** Starts downloading the installer (progress arrives through onUpdateState). */
+  downloadUpdate(): Promise<UpdateInstallState>
+  cancelUpdateDownload(): Promise<UpdateInstallState>
+  /** Installs the downloaded update; goo quits and starts again. */
+  installUpdate(): Promise<UpdateInstallState>
+  onUpdateState(handler: (s: UpdateInstallState) => void): void
   /** Questions from the Rust side for AI assistants (src-tauri/src/uibridge.rs); the handler's result is the answer. */
   onUiQuery(handler: (kind: string, args: unknown) => Promise<unknown>): void
 }

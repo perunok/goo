@@ -8,11 +8,17 @@
     title: string
     onClose: () => void
     width?: string
+    /** A fixed body height (e.g. "min(70vh, 40rem)"): the body scrolls, the dialog does not jump between tabs. */
+    height?: string
+    /** No padding around the body: the content lays itself out (Settings: tabs beside a panel). */
+    flush?: boolean
+    /** Something is in progress that must not be interrupted: Esc, the backdrop and the close button do nothing. */
+    busy?: boolean
     children: Snippet
     footer?: Snippet
   }
 
-  let { title, onClose, width = '480px', children, footer }: Props = $props()
+  let { title, onClose, width = '480px', height, flush = false, busy = false, children, footer }: Props = $props()
   let dlg: HTMLDialogElement
 
   onMount(() => {
@@ -22,11 +28,11 @@
 
   function oncancel(e: Event) {
     e.preventDefault()
-    onClose()
+    if (!busy) onClose()
   }
 
   function onclick(e: MouseEvent) {
-    if (e.target === dlg) onClose() // backdrop
+    if (e.target === dlg && !busy) onClose() // backdrop
   }
 </script>
 
@@ -34,9 +40,9 @@
 <dialog bind:this={dlg} {oncancel} {onclick} style:width aria-label={title}>
   <header>
     <h2>{title}</h2>
-    <IconButton icon="close" label="Close" onclick={onClose} />
+    <IconButton icon="close" label="Close" onclick={() => !busy && onClose()} />
   </header>
-  <div class="body">{@render children()}</div>
+  <div class="body" class:flush style:height>{@render children()}</div>
   {#if footer}<footer>{@render footer()}</footer>{/if}
 </dialog>
 
@@ -73,6 +79,14 @@
   .body {
     padding: 4px 18px 16px;
     overflow: auto;
+  }
+  .body.flush {
+    display: flex;
+    min-height: 0;
+    padding: 0;
+    /* clip, not hidden: a hidden box can still be scrolled by scrollIntoView() and by focusing a control inside, which
+       would push the section list out of view; the panel inside scrolls on its own */
+    overflow: clip;
   }
   footer {
     display: flex;

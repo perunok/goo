@@ -18,7 +18,7 @@
     "typecheck": "svelte-check --tsconfig ./tsconfig.json",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:rust": "cargo test -p goo-core -p goo-mcp -p goo-sync",
+    "test:rust": "cargo test -p goo-core -p goo-mcp -p goo-sync -p goo-update",
     "screenshots": "node scripts/screenshots.mjs"
   },
   "devDependencies": {

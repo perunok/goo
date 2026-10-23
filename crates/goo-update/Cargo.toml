@@ -1,0 +1,19 @@
+[package]
+name = "goo-update"
+version = "0.1.0"
+description = "goo's in-app updates: check GitHub for a newer release, download the installer for this installation, verify it and install it. No Tauri dependency."
+edition = "2021"
+license = "MIT"
+publish = false
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+semver = "1"
+sha2 = "0.10"
+# HTTPS to api.github.com and github.com (rustls); follows GitHub's redirect to the download host
+ureq = "3"
+
+[dev-dependencies]
+tempfile = "3"
+tiny_http = "0.12"

@@ -9,6 +9,7 @@
 mod cloud;
 mod mcp;
 mod uibridge;
+mod update;
 mod watch;
 
 use goo_core::{CoreError, ErrorCode, Recents, Tree};
@@ -305,6 +306,10 @@ pub fn run() {
             app.manage(mcp);
             app.manage(watch::FolderWatch::default());
             app.manage(uibridge::UiBridge::default());
+            app.manage(match update::Updates::new(app.handle()) {
+                Ok(u) => u,
+                Err(reason) => update::Updates::disabled(app.handle(), &reason),
+            });
             app.manage(cloud::Cloud::new(&config));
             cloud::Cloud::start(app.handle());
             Ok(())
@@ -342,6 +347,11 @@ pub fn run() {
             cloud::cloud_unlink,
             cloud::cloud_sync_now,
             uibridge::ui_answer,
+            update::check_for_updates,
+            update::update_state,
+            update::download_update,
+            update::cancel_update_download,
+            update::install_update,
         ])
         .build(tauri::generate_context!())
         .expect("error while building goo")

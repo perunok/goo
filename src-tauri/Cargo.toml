@@ -19,6 +19,7 @@ tauri-build = { version = "2", features = [] }
 goo-core = { path = "../crates/goo-core" }
 goo-mcp = { path = "../crates/goo-mcp" }
 goo-sync = { path = "../crates/goo-sync" }
+goo-update = { path = "../crates/goo-update" }
 # notices changes made outside goo in the open folder
 notify-debouncer-mini = "0.7"
 # deleting a note or folder moves it to the system trash
