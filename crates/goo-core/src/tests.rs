@@ -250,6 +250,25 @@ fn search_finds_names_and_lines() {
 }
 
 #[test]
+fn find_notes_needs_every_keyword_somewhere_in_the_note() {
+    let (_d, root) = ws();
+    touch(&root.join("Groceries.md"), "# List\nMilk\neggs\n");
+    touch(&root.join("work/plan.md"), "milk the idea\nlater\n");
+    touch(&root.join("skip.txt"), "milk eggs");
+    let paths = |q: &str| -> Vec<String> { find_notes(&root, q, 50).unwrap().into_iter().map(|m| relative_string(&root, Path::new(&m.path))).collect() };
+    assert_eq!(paths("milk"), ["work/plan.md", "Groceries.md"]);
+    // both words, on different lines
+    assert_eq!(paths("EGGS milk"), ["Groceries.md"]);
+    // a keyword may match the name instead of the text
+    assert_eq!(paths("work idea"), ["work/plan.md"]);
+    assert!(paths("milk bread").is_empty());
+    let m = &find_notes(&root, "eggs milk", 50).unwrap()[0];
+    assert_eq!(m.lines, [LineHit { line: 2, text: "Milk".into() }, LineHit { line: 3, text: "eggs".into() }]);
+    assert_eq!(find_notes(&root, "milk", 1).unwrap().len(), 1);
+    assert!(find_notes(&root, "  ", 5).is_err());
+}
+
+#[test]
 fn watched_changes_follow_the_tree_filters() {
     let (_d, root) = ws();
     touch(&root.join("a.md"), "");

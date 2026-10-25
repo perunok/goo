@@ -157,3 +157,55 @@ describe('file management', () => {
     expect(files.has(`${ROOT}/keep.md`)).toBe(true)
   })
 })
+
+describe('tabs', () => {
+  const NOTES = ['a.md', 'b.md', 'c.md'].map((n) => `${ROOT}/tabs/${n}`)
+  const open = () => workspace.docs.map((d) => d.path)
+
+  beforeEach(async () => {
+    if (!workspace.workspace) await workspace.pickFolder()
+    for (const d of [...workspace.docs]) {
+      d.text = d.savedText
+      await workspace.close(d.path)
+    }
+    for (const p of NOTES) {
+      outside(p, '# note\n')
+      await workspace.openFile(p)
+    }
+  })
+
+  it('close other tabs keeps the chosen tab and makes it active', async () => {
+    workspace.select(NOTES[2]!)
+    await workspace.closeOthers(NOTES[1]!)
+    expect(open()).toEqual([NOTES[1]])
+    expect(workspace.activePath).toBe(NOTES[1])
+  })
+
+  it('asks once about every unsaved tab; cancel keeps them all', async () => {
+    workspace.setText(NOTES[0]!, 'a')
+    workspace.setText(NOTES[2]!, 'b')
+    const closing = workspace.closeAll()
+    for (let i = 0; i < 20 && !ui.confirmRequest; i++) await new Promise((r) => setTimeout(r, 5))
+    expect(ui.confirmRequest!.title).toBe('2 notes have unsaved changes')
+    ui.confirmRequest!.resolve('cancel')
+    expect(await closing).toBe(false)
+    expect(open()).toEqual(NOTES)
+  })
+
+  it("close all tabs after Don't save", async () => {
+    workspace.setText(NOTES[0]!, 'a')
+    const closing = workspace.closeAll()
+    await answer('discard')
+    expect(await closing).toBe(true)
+    expect(open()).toEqual([])
+    expect(workspace.activePath).toBe(null)
+  })
+
+  it('Open note opens the picked note in a tab', async () => {
+    const picked = `${ROOT}/tabs/picked.md`
+    outside(picked, '# picked\n') // the newest note is what the mock's picker chooses
+    await workspace.pickFile()
+    expect(open()).toContain(picked)
+    expect(workspace.activePath).toBe(picked)
+  })
+})

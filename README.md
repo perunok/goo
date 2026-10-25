@@ -29,7 +29,7 @@ Regenerate them with `npm run dev` and `npm run screenshots`.
 ## Features
 
 - **Folders, not databases.** Open any folder: goo lists its Markdown files (`.md`, `.markdown`) as a tree, with a
-  quick filter. Right-click to create notes and folders, rename (F2), delete (Del) or show in the file manager; drag
+  keyword search (`Ctrl+F`: notes whose name or text has every word, with the matching lines). Right-click to create notes and folders, rename (F2), delete (Del) or show in the file manager; drag
   notes and folders to move them. Deleting moves things to the system trash, so it can be undone. Notes are saved as plain UTF-8 files with atomic writes (temp file + rename), so a crash never leaves
   half a note behind.
 - **Edit, split or preview** (`Ctrl+E`): a CodeMirror 6 editor with Markdown highlighting (and highlighting inside
@@ -41,13 +41,13 @@ Regenerate them with `npm run dev` and `npm run screenshots`.
 - **Themes and accents** shared with [Slinger](https://github.com/perunok/slinger): 31 light and dark palettes,
   18 accents layered over any of them, "follow the system", adjustable font size. Every theme × accent pair is
   checked for WCAG AA contrast (AAA for the high-contrast themes) by the test suite.
-- **Tabs** with per-tab undo history, unsaved markers and save prompts; the last folder and open notes come back on
-  the next start.
+- **Tabs** with per-tab undo history, unsaved markers and save prompts; right-click a tab to close it, the others or
+  all of them. The last folder and open notes come back on the next start.
 - **Notices outside changes**: when another program (another editor, `git pull`, Claude Code, a sync tool) changes a
   note, goo reloads it and refreshes the tree. If you have unsaved edits they stay, and saving asks whether to keep
   yours or load theirs.
-- **Open with goo** from any file manager (or `goo-notes notes.md` on Linux): the note opens in its folder; a selection of notes opens
-  as tabs in the one goo window.
+- **Open with goo** from any file manager (or `goo-notes notes.md` on Linux), or **Open note** in goo (`Ctrl+Shift+O`):
+  the note opens in its folder; a selection of notes opens as tabs in the one goo window.
 - **Reading width**: narrow, medium, wide or full, for the preview and the editor.
 - **Links between notes**: `[see this](../other.md#section)` opens the other note and scrolls to the heading. Web
   links open in your browser.
@@ -101,7 +101,9 @@ only your note folders, deletes go to the trash). Direct file edits by tools lik
 | Keys | Action |
 | --- | --- |
 | `Ctrl+O` | Open folder |
+| `Ctrl+Shift+O` | Open note (opens its folder too, unless it is in the open one) |
 | `Ctrl+N` | New note |
+| `Ctrl+F` | Search notes by keywords (in the editor: find and replace in the note; `Ctrl+Shift+F` searches notes from there) |
 | `Ctrl+S` / `Ctrl+Shift+S` | Save / save all |
 | `Ctrl+W`, `Ctrl+Tab` | Close tab, next tab |
 | `Ctrl+E` | Cycle edit / split / preview |

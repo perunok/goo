@@ -22,6 +22,14 @@ export interface Tree {
   truncated: boolean
 }
 
+/** A note that has every keyword of a search (goo_core::NoteMatch). */
+export interface NoteMatch {
+  /** Absolute path. */
+  path: string
+  /** The first lines with a keyword (none when only the name matched). */
+  lines: { line: number; text: string }[]
+}
+
 export type ErrorCode =
   | 'not_found'
   | 'outside_workspace'
@@ -148,11 +156,18 @@ export interface GooBackend {
   readonly kind: 'tauri' | 'mock'
   /** Native folder picker; null when cancelled. */
   pickWorkspace(): Promise<Workspace | null>
+  /**
+   * Native file picker for notes (several can be picked). The choice is queued like "Open with goo": claim it with
+   * `takeOpenRequest`, or `dropOpenRequest` to stay. Null when cancelled.
+   */
+  pickFile(): Promise<OpenEvent | null>
   /** Reopen a folder from the recent list. */
   openWorkspace(root: string): Promise<Workspace>
   recentWorkspaces(): Promise<Workspace[]>
   forgetWorkspace(root: string): Promise<void>
   listTree(): Promise<Tree>
+  /** Notes whose name or text contains every word of `query` (case-insensitive), in tree order. */
+  findNotes(query: string): Promise<NoteMatch[]>
   readFile(path: string): Promise<string>
   writeFile(path: string, contents: string): Promise<void>
   /** Creates a note (".md" appended when missing) and returns its path. */

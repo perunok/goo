@@ -1,11 +1,13 @@
 <script lang="ts">
-  import { flattenFiles, workspace } from '../../app/workspace.svelte'
+  import { workspace } from '../../app/workspace.svelte'
+  import { backend } from '../../app/backend'
+  import { ui } from '../../app/ui.svelte'
   import IconButton from '../../components/ui/IconButton.svelte'
   import Icon from '../../components/ui/Icon.svelte'
   import { relativeTo } from '../../lib/paths'
   import FileTree from './FileTree.svelte'
   import ContextMenu, { type MenuItem } from '../../components/ui/ContextMenu.svelte'
-  import type { TreeNode } from '../../backend/types'
+  import type { NoteMatch, TreeNode } from '../../backend/types'
   import { canDrop, dragged } from './dnd'
 
   let filter = $state('')
@@ -66,19 +68,58 @@
     if (root && canDrop(path, root)) void workspace.moveEntry(path, root)
   }
 
-  const matches = $derived.by(() => {
-    const q = filter.trim().toLowerCase()
-    if (!q || !workspace.tree || !workspace.workspace) return []
-    const root = workspace.workspace.root
-    return flattenFiles(workspace.tree.nodes)
-      .map((n) => ({ node: n, rel: relativeTo(root, n.path) }))
-      .filter((m) => m.rel.toLowerCase().includes(q))
-      .slice(0, 200)
+  // Keyword search (names and text, every word must appear), a moment after typing stops.
+  let input: HTMLInputElement | undefined = $state()
+  let results = $state<NoteMatch[]>([])
+  let searching = $state(false)
+  let searchSeq = 0
+  const words = $derived(filter.toLowerCase().split(/\s+/).filter(Boolean))
+
+  $effect(() => {
+    const q = filter.trim()
+    void workspace.tree // search again when notes change on disk
+    const seq = ++searchSeq
+    if (!q || !workspace.workspace) {
+      results = []
+      searching = false
+      return
+    }
+    searching = true
+    const timer = setTimeout(async () => {
+      try {
+        const found = await backend.findNotes(q)
+        if (seq === searchSeq) results = found
+      } catch {
+        if (seq === searchSeq) results = []
+      } finally {
+        if (seq === searchSeq) searching = false
+      }
+    }, 150)
+    return () => clearTimeout(timer)
   })
+
+  // Ctrl+F
+  $effect(() => {
+    if (ui.findPending && input) {
+      ui.findPending = false
+      input.focus()
+      input.select()
+    }
+  })
+
+  /** `text` cut into plain and keyword parts, for highlighting. */
+  function marked(text: string): { t: string; hit: boolean }[] {
+    if (!words.length) return [{ t: text, hit: false }]
+    const re = new RegExp(`(${words.map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})`, 'gi')
+    return text
+      .split(re)
+      .filter(Boolean)
+      .map((t) => ({ t, hit: words.includes(t.toLowerCase()) }))
+  }
 
   function onkeydown(e: KeyboardEvent) {
     if (e.key === 'Escape') filter = ''
-    if (e.key === 'Enter' && matches[0]) void workspace.openFile(matches[0].node.path)
+    if (e.key === 'Enter' && results[0]) void workspace.openFile(results[0].path)
   }
 </script>
 
@@ -89,11 +130,12 @@
       <IconButton icon="filePlus" label="New note (Ctrl+N)" onclick={() => workspace.newNote()} />
       <IconButton icon="folderPlus" label="New folder" onclick={() => workspace.newFolder()} />
       <IconButton icon="refresh" label="Refresh" onclick={() => workspace.refreshTree()} />
+      <IconButton icon="file" label="Open note (Ctrl+Shift+O)" onclick={() => workspace.pickFile()} />
       <IconButton icon="folderOpen" label="Open folder (Ctrl+O)" onclick={() => workspace.pickFolder()} />
     </div>
     <label class="filter">
       <Icon name="search" size={14} />
-      <input bind:value={filter} placeholder="Filter notes" spellcheck="false" {onkeydown} />
+      <input bind:this={input} bind:value={filter} placeholder="Search notes (Ctrl+F)" aria-label="Search notes by keywords" spellcheck="false" {onkeydown} />
     </label>
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div
@@ -107,12 +149,16 @@
       ondrop={onRootDrop}
     >
       {#if filter.trim()}
-        {#each matches as m (m.node.path)}
-          <button type="button" class="match" class:active={workspace.activePath === m.node.path} onclick={() => workspace.openFile(m.node.path)} title={m.rel}>
-            {m.rel}
+        {#each results as m (m.path)}
+          {@const rel = relativeTo(workspace.workspace?.root ?? '', m.path)}
+          <button type="button" class="match" class:active={workspace.activePath === m.path} onclick={() => workspace.openFile(m.path)} title={rel}>
+            <span class="mname">{#each marked(rel) as p, i (i)}{#if p.hit}<mark>{p.t}</mark>{:else}{p.t}{/if}{/each}</span>
+            {#each m.lines as l (l.line)}
+              <span class="mline"><span class="ln">{l.line}</span>{#each marked(l.text) as p, i (i)}{#if p.hit}<mark>{p.t}</mark>{:else}{p.t}{/if}{/each}</span>
+            {/each}
           </button>
         {:else}
-          <p class="empty">No notes match “{filter}”.</p>
+          <p class="empty">{searching ? 'Searching…' : `No notes contain “${filter.trim()}”.`}</p>
         {/each}
       {:else if workspace.tree && workspace.tree.nodes.length}
         <FileTree nodes={workspace.tree.nodes} onMenu={nodeMenu} />
@@ -136,6 +182,7 @@
     display: flex;
     flex-direction: column;
     min-width: 0;
+    min-height: 0;
     height: 100%;
     background: var(--bg);
     border-right: 1px solid var(--border);
@@ -206,6 +253,29 @@
   .match:hover,
   .match.active {
     background: var(--surface-hover);
+    color: var(--text);
+  }
+  .mname,
+  .mline {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .mline {
+    color: var(--text-faint);
+    font-size: 0.85em;
+  }
+  .ln {
+    display: inline-block;
+    min-width: 2.2em;
+    margin-right: 4px;
+    color: var(--text-faint);
+    font-variant-numeric: tabular-nums;
+  }
+  mark {
+    border-radius: 2px;
+    background: var(--accent-soft);
     color: var(--text);
   }
   .empty {
