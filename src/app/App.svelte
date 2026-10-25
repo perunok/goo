@@ -127,6 +127,8 @@
   .app {
     display: grid;
     grid-template-columns: 1fr;
+    /* one row exactly the window's height: a long file tree scrolls inside the sidebar instead of stretching the row */
+    grid-template-rows: minmax(0, 1fr);
     height: 100vh;
   }
   .app.with-sidebar {

@@ -15,7 +15,8 @@ pub const MAX_TREE_ENTRIES: usize = 20_000;
 /// How many recent workspaces are remembered.
 pub const MAX_RECENTS: usize = 12;
 
-const MARKDOWN_EXTENSIONS: &[&str] = &["md", "markdown", "mdown", "mkd"];
+/// What counts as a note. Public for the file picker's filter.
+pub const MARKDOWN_EXTENSIONS: &[&str] = &["md", "markdown", "mdown", "mkd"];
 /// Folders the tree leaves out (with hidden entries). Public so sync can refuse remote paths the tree would not show.
 pub const SKIPPED_DIRS: &[&str] = &["node_modules", "target", "dist", "build", "__pycache__"];
 
@@ -345,11 +346,7 @@ pub fn search_notes(root: &Path, query: &str, limit: usize) -> Result<Vec<Search
                 break;
             }
             if line.to_lowercase().contains(&q) {
-                let mut t: String = line.trim().chars().take(240).collect();
-                if line.trim().chars().count() > 240 {
-                    t.push('…');
-                }
-                hits.push(SearchHit { path: rel.clone(), line: i + 1, text: t });
+                hits.push(SearchHit { path: rel.clone(), line: i + 1, text: snippet(line) });
                 per_note += 1;
             }
         }
@@ -358,6 +355,65 @@ pub fn search_notes(root: &Path, query: &str, limit: usize) -> Result<Vec<Search
         }
     }
     Ok(hits)
+}
+
+/// A line shortened for a search result.
+fn snippet(line: &str) -> String {
+    let mut t: String = line.trim().chars().take(240).collect();
+    if line.trim().chars().count() > 240 {
+        t.push('…');
+    }
+    t
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct LineHit {
+    /// 1-based line number.
+    pub line: usize,
+    pub text: String,
+}
+
+/// A note found by `find_notes`.
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct NoteMatch {
+    /// Absolute path.
+    pub path: String,
+    /// The first lines with any of the keywords (at most 3; none when only the name matched).
+    pub lines: Vec<LineHit>,
+}
+
+/// Keyword search for the sidebar: the notes (in tree order, at most `limit`) whose name or text contains every
+/// whitespace-separated word of `query`, case-insensitively, each anywhere in the note.
+pub fn find_notes(root: &Path, query: &str, limit: usize) -> Result<Vec<NoteMatch>> {
+    let words: Vec<String> = query.split_whitespace().map(str::to_lowercase).collect();
+    if words.is_empty() {
+        return Err(CoreError::new(ErrorCode::InvalidName, "the search text is empty"));
+    }
+    let (notes, _) = list_notes(root)?;
+    let mut found = Vec::new();
+    for note in notes {
+        if found.len() >= limit {
+            break;
+        }
+        let Ok(text) = read_text(&note) else { continue };
+        let name = relative_string(root, &note).to_lowercase();
+        let lower = text.to_lowercase();
+        if !words.iter().all(|w| name.contains(w.as_str()) || lower.contains(w.as_str())) {
+            continue;
+        }
+        let lines = text
+            .lines()
+            .enumerate()
+            .filter(|(_, l)| {
+                let l = l.to_lowercase();
+                words.iter().any(|w| l.contains(w.as_str()))
+            })
+            .take(3)
+            .map(|(i, l)| LineHit { line: i + 1, text: snippet(l) })
+            .collect();
+        found.push(NoteMatch { path: path_string(&note), lines });
+    }
+    Ok(found)
 }
 
 // ---------------------------------------------------------------------------
