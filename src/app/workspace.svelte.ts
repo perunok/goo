@@ -173,6 +173,23 @@ class WorkspaceStore {
     }
   }
 
+  /**
+   * Native file picker for notes. Opens like "Open with goo": in the open folder when the note is inside it,
+   * otherwise in the note's own folder (asking about unsaved notes before switching).
+   */
+  async pickFile() {
+    if (this.picking) return
+    this.picking = true
+    try {
+      const picked = await backend.pickFile()
+      if (picked) await this.handleOpenEvent(picked)
+    } catch (e) {
+      ui.toast(errorMessage(e), 'error')
+    } finally {
+      this.picking = false
+    }
+  }
+
   async openRecent(root: string, confirm = true): Promise<boolean> {
     if (confirm && !(await this.confirmLeave())) return false
     try {
@@ -329,6 +346,32 @@ class WorkspaceStore {
     this.docs = this.docs.filter((x) => x !== d)
     if (this.activePath === path) this.activePath = (this.docs[i] ?? this.docs[i - 1])?.path ?? null
     this.persist()
+  }
+
+  /** Closes the tabs in `paths`, asking once about the ones with unsaved edits. False when cancelled. */
+  async closeTabs(paths: string[]): Promise<boolean> {
+    const closing = this.docs.filter((d) => paths.includes(d.path))
+    const dirty = closing.filter(isDirty)
+    if (dirty.length && (await this.confirmDiscard(dirty)) === 'cancel') return false
+    const i = this.docs.findIndex((d) => d.path === this.activePath)
+    const kept = this.docs.filter((d) => !closing.includes(d))
+    if (!kept.some((d) => d.path === this.activePath)) {
+      // like closing one tab: the next tab to the right that stays, else the nearest one to the left
+      const next = this.docs.slice(i + 1).find((d) => kept.includes(d)) ?? this.docs.slice(0, Math.max(i, 0)).reverse().find((d) => kept.includes(d))
+      this.activePath = next?.path ?? null
+    }
+    this.docs = kept
+    this.persist()
+    return true
+  }
+
+  /** Closes every tab but `path`, which becomes the active one. */
+  async closeOthers(path: string) {
+    if (await this.closeTabs(this.docs.filter((d) => d.path !== path).map((d) => d.path))) this.select(path)
+  }
+
+  closeAll() {
+    return this.closeTabs(this.docs.map((d) => d.path))
   }
 
   select(path: string) {

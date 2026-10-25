@@ -20,6 +20,8 @@ export function createMockBackend(opts: { latencyMs?: number; files?: Record<str
   /** Empty folders (folders with notes come from the note paths). */
   const folders = new Set<string>()
   let open: Workspace | null = null
+  /** Notes picked with "Open note", waiting for `takeOpenRequest`. */
+  let pending: string[] = []
   // MCP needs the desktop app; the browser mock only shows the settings UI.
   const mcp: McpStatus = {
     enabled: false,
@@ -116,6 +118,14 @@ export function createMockBackend(opts: { latencyMs?: number; files?: Record<str
       open = workspace
       return workspace
     },
+    async pickFile() {
+      await wait()
+      // A browser has no file picker: the last note stands in for the user's choice.
+      const note = [...files.keys()].pop()
+      if (!note) return null
+      pending = [note]
+      return { path: root, switch: open?.root !== root }
+    },
     async openWorkspace(r) {
       await wait()
       if (r !== root) fail('outside_workspace', 'Pick this folder with Open Folder first')
@@ -130,6 +140,31 @@ export function createMockBackend(opts: { latencyMs?: number; files?: Record<str
       await wait()
       if (!open) fail('no_workspace', 'No folder is open')
       return tree()
+    },
+    async findNotes(query) {
+      await wait()
+      if (!open) fail('no_workspace', 'No folder is open')
+      const words = query.toLowerCase().split(/\s+/).filter(Boolean)
+      if (!words.length) fail('invalid_name', 'the search text is empty')
+      const notes: string[] = []
+      const walk = (nodes: TreeNode[]) => nodes.forEach((n) => (n.children ? walk(n.children) : notes.push(n.path)))
+      walk(tree().nodes)
+      return notes
+        .filter((p) => {
+          const name = p.slice(root.length + 1).toLowerCase()
+          const text = files.get(p)!.toLowerCase()
+          return words.every((w) => name.includes(w) || text.includes(w))
+        })
+        .slice(0, 200)
+        .map((path) => ({
+          path,
+          lines: files
+            .get(path)!
+            .split('\n')
+            .map((text, i) => ({ line: i + 1, text: text.trim() }))
+            .filter((l) => words.some((w) => l.text.toLowerCase().includes(w)))
+            .slice(0, 3),
+        }))
     },
     async readFile(path) {
       await wait()
@@ -194,11 +229,18 @@ export function createMockBackend(opts: { latencyMs?: number; files?: Record<str
         if (hasUnsaved()) e.preventDefault()
       })
     },
-    // A browser has no "Open with"; nothing is ever pending.
+    // A browser has no "Open with"; only "Open note" queues something.
     async takeOpenRequest() {
-      return null
+      const picked = pending
+      pending = []
+      if (!picked.length) return null
+      const switched = open?.root !== root
+      open = workspace
+      return { workspace, files: picked, skipped: [], switched }
     },
-    async dropOpenRequest() {},
+    async dropOpenRequest() {
+      pending = []
+    },
     onOpenRequest() {},
     async setUnsaved() {},
     onFilesChanged() {},

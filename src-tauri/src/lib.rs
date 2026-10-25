@@ -28,7 +28,7 @@ struct AppState {
     recents_file: PathBuf,
     /// Files or a folder to open that came from outside the app, waiting for the UI to take them.
     pending_open: Mutex<Vec<PathBuf>>,
-    /// A folder picker is on screen (only one at a time).
+    /// A folder or file picker is on screen (only one at a time).
     picking: AtomicBool,
     /// Notes with unsaved edits in the window (reported by the UI); AI assistants may not write them.
     unsaved: Mutex<Vec<PathBuf>>,
@@ -93,6 +93,33 @@ async fn pick_workspace(app: AppHandle, state: State<'_, AppState>) -> CmdResult
     activate(&app, &state, &path).map(Some)
 }
 
+/// Native file picker for notes (several at once), modal like the folder picker. The choice is queued like "Open with
+/// goo" and the UI claims it with `take_open_request`; the returned event says whether it leaves the open folder (so
+/// the UI asks about unsaved notes first).
+#[tauri::command]
+async fn pick_file(app: AppHandle, state: State<'_, AppState>) -> CmdResult<Option<OpenEvent>> {
+    if state.picking.swap(true, Ordering::SeqCst) {
+        return Ok(None);
+    }
+    let _guard = PickingGuard(&state.picking);
+    let mut dialog = app.dialog().file().set_title("Open notes").add_filter("Markdown", goo_core::MARKDOWN_EXTENSIONS);
+    #[cfg(desktop)]
+    if let Some(window) = app.get_webview_window("main") {
+        dialog = dialog.set_parent(&window);
+    }
+    let Some(picked) = dialog.blocking_pick_files() else {
+        return Ok(None);
+    };
+    let paths = picked
+        .into_iter()
+        .map(|p| p.into_path().map_err(|e| CoreError::new(ErrorCode::Io, e.to_string())))
+        .collect::<CmdResult<Vec<_>>>()?;
+    let current = state.root.lock().unwrap().clone();
+    let plan = goo_core::plan_open(current.as_deref(), &paths)?;
+    *state.pending_open.lock().unwrap() = paths;
+    Ok(Some(OpenEvent { path: path_out(plan.root), switch: plan.switch }))
+}
+
 /// Reopens a folder from the recent list. Only folders the user picked before are accepted, so the UI cannot widen
 /// its own file access.
 #[tauri::command]
@@ -125,6 +152,12 @@ fn forget_workspace(root: String, state: State<'_, AppState>) -> CmdResult<()> {
 #[tauri::command]
 async fn list_tree(state: State<'_, AppState>) -> CmdResult<Tree> {
     goo_core::list_tree(&current_root(&state)?)
+}
+
+/// Keyword search over the open folder's notes (the sidebar's search box).
+#[tauri::command]
+async fn find_notes(query: String, state: State<'_, AppState>) -> CmdResult<Vec<goo_core::NoteMatch>> {
+    goo_core::find_notes(&current_root(&state)?, &query, 200)
 }
 
 #[tauri::command]
@@ -311,10 +344,12 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             pick_workspace,
+            pick_file,
             open_workspace,
             recent_workspaces,
             forget_workspace,
             list_tree,
+            find_notes,
             read_file,
             write_file,
             create_file,

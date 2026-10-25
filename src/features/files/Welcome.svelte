@@ -11,9 +11,14 @@
   <img src="/goo.svg" alt="" width="88" height="88" />
   <h1>goo</h1>
   <p class="tag">Plain Markdown, your folders, your colours.</p>
-  <Button kind="primary" onclick={() => workspace.pickFolder()}>
-    <Icon name="folderOpen" /> Open a folder
-  </Button>
+  <div class="actions">
+    <Button kind="primary" onclick={() => workspace.pickFolder()}>
+      <Icon name="folderOpen" /> Open a folder
+    </Button>
+    <Button onclick={() => workspace.pickFile()}>
+      <Icon name="file" /> Open a note
+    </Button>
+  </div>
 
   {#if workspace.recents.length}
     <div class="recents">
@@ -35,6 +40,7 @@
 
   <dl class="keys">
     <dt><kbd>Ctrl</kbd> <kbd>O</kbd></dt><dd>Open folder</dd>
+    <dt><kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>O</kbd></dt><dd>Open note</dd>
     <dt><kbd>Ctrl</kbd> <kbd>N</kbd></dt><dd>New note</dd>
     <dt><kbd>Ctrl</kbd> <kbd>E</kbd></dt><dd>Edit / split / preview</dd>
     <dt><kbd>Ctrl</kbd> <kbd>,</kbd></dt><dd>Themes and accents</dd>
@@ -67,6 +73,12 @@
   .tag {
     margin: 0 0 10px;
     color: var(--text-muted);
+  }
+  .actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px;
   }
   .recents {
     width: min(520px, 100%);

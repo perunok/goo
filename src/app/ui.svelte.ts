@@ -39,6 +39,8 @@ class Ui {
   assistantTool = $state<string | null>(null)
   private assistantTimer: ReturnType<typeof setTimeout> | null = null
   promptRequest = $state<PromptRequest | null>(null)
+  /** Ctrl+F asked for the sidebar's note search; the sidebar focuses it (once it is shown) and clears this. */
+  findPending = $state(false)
   private nextId = 1
 
   open(d: Exclude<DialogName, null>, tab?: SettingsTab) {
