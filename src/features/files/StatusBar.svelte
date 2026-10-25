@@ -5,6 +5,7 @@
   import { relativeTo } from '../../lib/paths'
   import { findTheme } from '../../lib/themes'
   import { ago, cloud } from '../cloud/cloud.svelte'
+  import { updates } from '../updates/updates.svelte'
 
   const CLOUD_LABEL: Record<string, string> = { idle: 'Synced', syncing: 'Syncing…', offline: 'Offline', error: 'Sync problem', signed_out: 'Signed out' }
   const sync = $derived(cloud.current)
@@ -33,6 +34,11 @@
     <span>{counts.words.toLocaleString()} words</span>
     <span>{counts.chars.toLocaleString()} chars</span>
     <span class:unsaved={isDirty(doc)}>{isDirty(doc) ? 'Unsaved' : 'Saved'}</span>
+  {/if}
+  {#if updates.available}
+    <button type="button" class="update" onclick={() => updates.openDialog()} title="goo {updates.available.version} is available (you have {updates.currentVersion})">
+      Update available
+    </button>
   {/if}
   {#if sync}
     <button
@@ -75,6 +81,19 @@
   .assistant {
     color: var(--accent-text);
     white-space: nowrap;
+  }
+  .update {
+    padding: 0 8px;
+    border: 0;
+    border-radius: 9px;
+    background: var(--accent-soft);
+    color: var(--accent-text);
+    font: inherit;
+    cursor: pointer;
+  }
+  .update:hover {
+    background: var(--accent);
+    color: var(--accent-fg);
   }
   .cloud {
     padding: 0 4px;

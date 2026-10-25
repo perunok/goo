@@ -10,7 +10,7 @@ npm run dev            # UI only, browser, in-memory mock backend (src/backend/m
 npm run app:dev        # real desktop app (needs the Tauri Linux prerequisites, see README)
 npm run typecheck      # svelte-check
 npm test               # vitest (jsdom): src/**/*.test.ts
-npm run test:rust      # cargo test -p goo-core -p goo-mcp -p goo-sync
+npm run test:rust      # cargo test -p goo-core -p goo-mcp -p goo-sync -p goo-update
 npm run app:build      # installers
 ```
 
@@ -39,6 +39,20 @@ npm run app:build      # installers
   (`links.json`), per-workspace state dirs, and one scheduler thread (60 s, sooner after a save / Sync now, backoff).
   It emits `cloud-status` and `files-changed`. UI: `src/features/cloud/` (store, Settings tab, status bar). Real-server
   test: `GOO_SYNC_IT_SERVER_DIR=../goo-cloud/server cargo test -p goo-sync --test real_server`.
+- `crates/goo-update`: in-app updates (no Tauri), a port of Slinger's `updateCheck.ts`/`updateInstall.ts`. `check.rs` +
+  `release.rs` (GitHub `releases/latest`; only a stable semver tag and `published_at` are trusted), `detect.rs`
+  (AppImage / deb / rpm / NSIS / msi / dmg / dev from the executable path), `installer.rs` (`Installer`: download to
+  `.part`, verify GitHub's `digest` + size, install per method, restart via a detached `sh` that waits for our PID;
+  all process/OS access behind the `Spawner` trait). `src-tauri/src/update.rs` has the commands (`check_for_updates`,
+  `update_state`, `download_update`, `cancel_update_download`, `install_update`) and the `update-state` event. UI:
+  `src/features/updates/` (store, dialog; one persistent toast per version, localStorage `goo.updates`),
+  `src/lib/updates.ts`, status bar chip, About button. `GOO_UPDATE_FEED_URL` overrides the feed, `GOO_UPDATES=off`
+  disables checks. The mock backend has a pretend updater (`MockUpdates`, `?mockUpdate=none|manual`). A JSON contract
+  test keeps `UpdateState` in step with `types.ts`. macOS dmg and Windows NSIS installs are not tested on hardware.
+- Settings dialog: vertical `Tabs` (Appearance, Layout & editor, goo cloud, Updates, AI assistants), live theme
+  thumbnails (`ThemePreview` sets `data-theme`/`data-accent` on its own element), `AccentPicker`, `InfoTip`.
+  Component tests need the `svelteTesting()` plugin (`vite.config.ts`, `src/test/setup.ts`). Not ported from
+  Slinger's Settings: custom themes, close-to-tray, title-bar customization.
 - Folder watching: `src-tauri/src/watch.rs` (notify-debouncer-mini, follows the open root in `activate`) emits
   `files-changed` with `tree: true`; `goo_core::classify_change` filters like the tree. The store reloads clean notes,
   marks dirty ones `diskChanged` (save then asks keep mine / load theirs) and ignores its own save echoes (same text).

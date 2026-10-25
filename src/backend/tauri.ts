@@ -1,7 +1,7 @@
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { getCurrentWindow } from '@tauri-apps/api/window'
-import type { CloudStatus, CloudWorkspace, FilesChanged, GooBackend, McpStatus, NoteMatch, OpenEvent, OpenRequest, Tree, Workspace } from './types'
+import type { CloudStatus, CloudWorkspace, FilesChanged, GooBackend, McpStatus, NoteMatch, OpenEvent, OpenRequest, Tree, UpdateCheckResult, UpdateInstallState, Workspace } from './types'
 
 /** The Rust side (src-tauri/src/lib.rs); argument names match the command parameters. */
 export const tauriBackend: GooBackend = {
@@ -63,6 +63,14 @@ export const tauriBackend: GooBackend = {
     invoke<CloudStatus>('cloud_link', 'workspaceId' in link ? { workspaceId: link.workspaceId, newName: null } : { workspaceId: null, newName: link.newName }),
   cloudUnlink: (root) => invoke<CloudStatus>('cloud_unlink', { root }),
   cloudSyncNow: (root) => invoke<void>('cloud_sync_now', { root: root ?? null }),
+  checkForUpdates: () => invoke<UpdateCheckResult>('check_for_updates'),
+  updateInstallState: () => invoke<UpdateInstallState>('update_state'),
+  downloadUpdate: () => invoke<UpdateInstallState>('download_update'),
+  cancelUpdateDownload: () => invoke<UpdateInstallState>('cancel_update_download'),
+  installUpdate: () => invoke<UpdateInstallState>('install_update'),
+  onUpdateState(handler) {
+    void listen<UpdateInstallState>('update-state', (e) => handler(e.payload))
+  },
   onUiQuery(handler) {
     void listen<{ id: number; kind: string; args: unknown }>('ui-query', async (e) => {
       const { id, kind, args } = e.payload

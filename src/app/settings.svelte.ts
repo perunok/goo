@@ -21,6 +21,9 @@ const UI_KEY = 'goo.ui'
 interface UiPrefs {
   viewMode: ViewMode
   sidebar: boolean
+  statusBar: boolean
+  /** Reopen the last folder and its open notes on startup. */
+  restoreSession: boolean
   wrap: boolean
   /** Max width of the text column in px (preview, and the editor in edit-only mode); 0 = full width. */
   readingWidth: number
@@ -35,7 +38,7 @@ export const READING_WIDTH_PRESETS: { label: string; width: number }[] = [
   { label: 'Full', width: 0 },
 ]
 
-const DEFAULT_UI: UiPrefs = { viewMode: 'split', sidebar: true, wrap: true, readingWidth: 820 }
+const DEFAULT_UI: UiPrefs = { viewMode: 'split', sidebar: true, statusBar: true, restoreSession: true, wrap: true, readingWidth: 820 }
 
 export function sanitizeReadingWidth(v: unknown): number {
   if (typeof v !== 'number' || !Number.isFinite(v)) return DEFAULT_UI.readingWidth
@@ -49,6 +52,8 @@ function loadUi(): UiPrefs {
     return {
       viewMode: VIEW_MODES.includes(raw.viewMode as ViewMode) ? (raw.viewMode as ViewMode) : DEFAULT_UI.viewMode,
       sidebar: typeof raw.sidebar === 'boolean' ? raw.sidebar : DEFAULT_UI.sidebar,
+      statusBar: typeof raw.statusBar === 'boolean' ? raw.statusBar : DEFAULT_UI.statusBar,
+      restoreSession: typeof raw.restoreSession === 'boolean' ? raw.restoreSession : DEFAULT_UI.restoreSession,
       wrap: typeof raw.wrap === 'boolean' ? raw.wrap : DEFAULT_UI.wrap,
       readingWidth: sanitizeReadingWidth(raw.readingWidth),
     }

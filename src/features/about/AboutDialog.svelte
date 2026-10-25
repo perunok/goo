@@ -1,6 +1,8 @@
 <script lang="ts">
+  import Button from '../../components/ui/Button.svelte'
   import Dialog from '../../components/ui/Dialog.svelte'
   import { ui } from '../../app/ui.svelte'
+  import { updates } from '../updates/updates.svelte'
   import { APP_VERSION, MANIFESTO, MANIFESTO_SIGNOFF, MANIFESTO_TITLE } from './credits'
 </script>
 
@@ -10,6 +12,13 @@
     <div>
       <div class="name">goo <span class="ver">{APP_VERSION}</span></div>
       <div class="tag">A small, local-first Markdown editor. MIT licensed.</div>
+    </div>
+    <div class="check">
+      {#if updates.available}
+        <Button kind="primary" onclick={() => { ui.close(); updates.openDialog() }}>Update to {updates.available.version}</Button>
+      {:else}
+        <Button disabled={updates.checking} onclick={() => void updates.check('manual')}>{updates.checking ? 'Checking…' : 'Check for updates'}</Button>
+      {/if}
     </div>
   </div>
   <h3>{MANIFESTO_TITLE}</h3>
@@ -30,6 +39,9 @@
   }
   .top img {
     border-radius: 12px;
+  }
+  .check {
+    margin-left: auto;
   }
   .name {
     font-size: 1.4em;

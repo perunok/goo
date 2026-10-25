@@ -17,6 +17,7 @@
   import Welcome from '../features/files/Welcome.svelte'
   import SettingsDialog from '../features/settings/SettingsDialog.svelte'
   import AboutDialog from '../features/about/AboutDialog.svelte'
+  import UpdateDialog from '../features/updates/UpdateDialog.svelte'
   import WidthControl from '../features/settings/WidthControl.svelte'
 
   const doc = $derived(workspace.active)
@@ -114,12 +115,13 @@
         </div>
       {/if}
     </div>
-    <StatusBar />
+    {#if settings.ui.statusBar}<StatusBar />{/if}
   </main>
 </div>
 
 {#if ui.dialog === 'settings'}<SettingsDialog />{/if}
 {#if ui.dialog === 'about'}<AboutDialog />{/if}
+{#if ui.updateOpen}<UpdateDialog />{/if}
 <ConfirmHost />
 <Toasts />
 

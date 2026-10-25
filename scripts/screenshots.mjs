@@ -84,7 +84,15 @@ await p.getByLabel('Allow AI assistants to use goo').check()
 await sleep(300)
 await shot(p, '06-ai-assistants')
 
-// 7. welcome screen
+// 7. updates (the in-memory backend pretends a newer release exists)
+p = await page({ theme: 'github-dark', accent: 'blue' })
+await settingsTab(p, 'Updates')
+await p.getByRole('button', { name: 'Check now' }).click()
+await p.waitForSelector('text=is available', { timeout: 10_000 })
+await sleep(300)
+await shot(p, '08-updates')
+
+// 8. welcome screen
 const context = await browser.newContext({ viewport: { width: 1440, height: 900 } })
 await context.addInitScript(() => localStorage.setItem('goo.appearance', JSON.stringify({ v: 1, theme: 'midnight', accent: 'violet', systemLight: 'light', systemDark: 'dark', fontSize: 14 })))
 p = await context.newPage()
