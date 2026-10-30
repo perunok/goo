@@ -22,13 +22,14 @@ with that package: install `goo-notes` and remove the other one with `sudo apt r
 | ![Preview in GitHub Light](docs/screenshots/02-preview-light.png)<br>**Preview** with tables, task lists and code, in any of 31 themes | ![Reading width](docs/screenshots/03-tables-reading-width.png)<br>**Reading width** (narrow to full) and tables that size to their content |
 | ![Themes and accents](docs/screenshots/04-themes.png)<br>**31 themes × 18 accents**, each pair checked for contrast | ![goo cloud](docs/screenshots/05-goo-cloud.png)<br>**goo cloud**: sync a folder between computers and share it |
 | ![AI assistants](docs/screenshots/06-ai-assistants.png)<br>**AI assistants (MCP)**: Claude and others work with your notes | ![Welcome](docs/screenshots/07-welcome.png)<br>**Welcome**: open a folder, or a recent one |
+| ![Updates](docs/screenshots/08-updates.png)<br>**In-app updates**: check, download, verify and install from Settings | |
 
 Regenerate them with `npm run dev` and `npm run screenshots`.
 
 ## Features
 
 - **Folders, not databases.** Open any folder: goo lists its Markdown files (`.md`, `.markdown`) as a tree, with a
-  quick filter. Right-click to create notes and folders, rename (F2), delete (Del) or show in the file manager; drag
+  keyword search (`Ctrl+F`: notes whose name or text has every word, with the matching lines). Right-click to create notes and folders, rename (F2), delete (Del) or show in the file manager; drag
   notes and folders to move them. Deleting moves things to the system trash, so it can be undone. Notes are saved as plain UTF-8 files with atomic writes (temp file + rename), so a crash never leaves
   half a note behind.
 - **Edit, split or preview** (`Ctrl+E`): a CodeMirror 6 editor with Markdown highlighting (and highlighting inside
@@ -40,13 +41,13 @@ Regenerate them with `npm run dev` and `npm run screenshots`.
 - **Themes and accents** shared with [Slinger](https://github.com/perunok/slinger): 31 light and dark palettes,
   18 accents layered over any of them, "follow the system", adjustable font size. Every theme × accent pair is
   checked for WCAG AA contrast (AAA for the high-contrast themes) by the test suite.
-- **Tabs** with per-tab undo history, unsaved markers and save prompts; the last folder and open notes come back on
-  the next start.
+- **Tabs** with per-tab undo history, unsaved markers and save prompts; right-click a tab to close it, the others or
+  all of them. The last folder and open notes come back on the next start.
 - **Notices outside changes**: when another program (another editor, `git pull`, Claude Code, a sync tool) changes a
   note, goo reloads it and refreshes the tree. If you have unsaved edits they stay, and saving asks whether to keep
   yours or load theirs.
-- **Open with goo** from any file manager (or `goo-notes notes.md` on Linux): the note opens in its folder; a selection of notes opens
-  as tabs in the one goo window.
+- **Open with goo** from any file manager (or `goo-notes notes.md` on Linux), or **Open note** in goo (`Ctrl+Shift+O`):
+  the note opens in its folder; a selection of notes opens as tabs in the one goo window.
 - **Reading width**: narrow, medium, wide or full, for the preview and the editor.
 - **Links between notes**: `[see this](../other.md#section)` opens the other note and scrolls to the heading. Web
   links open in your browser.
@@ -56,6 +57,12 @@ Regenerate them with `npm run dev` and `npm run screenshots`.
 - **goo cloud** (optional, self-hosted [goo-cloud](https://github.com/perunok/goo-cloud) server): sync a folder
   between your computers and share it, with line-by-line merging of edits made on two devices and conflict copies
   instead of lost text. Settings > goo cloud.
+- **Updates inside the app**: goo checks GitHub for a newer release once a day (switch it off in Settings > Updates),
+  shows one notification per version, and **Update now** downloads the installer, verifies it against GitHub's
+  SHA-256 and size, and installs it when you restart: AppImage replaced in place, `.deb` through the system's
+  password prompt (`pkexec`), Windows installer silently, macOS app bundle swapped. Installs it cannot update itself
+  (`.rpm`, `.msi`, development builds) get a **View release** link instead. Unsaved notes are saved or kept first.
+  Set `GOO_UPDATES=off` to disable all checks; `GOO_UPDATE_FEED_URL` points them at another feed (tests).
 - **Safe by default**: rendered notes are sanitised (no scripts, no event handlers, no remote content), Mermaid runs
   in `strict` mode, and the Rust side refuses any file path outside the folder you opened.
 
@@ -94,12 +101,14 @@ only your note folders, deletes go to the trash). Direct file edits by tools lik
 | Keys | Action |
 | --- | --- |
 | `Ctrl+O` | Open folder |
+| `Ctrl+Shift+O` | Open note (opens its folder too, unless it is in the open one) |
 | `Ctrl+N` | New note |
+| `Ctrl+F` | Search notes by keywords (in the editor: find and replace in the note; `Ctrl+Shift+F` searches notes from there) |
 | `Ctrl+S` / `Ctrl+Shift+S` | Save / save all |
 | `Ctrl+W`, `Ctrl+Tab` | Close tab, next tab |
 | `Ctrl+E` | Cycle edit / split / preview |
 | `Ctrl+\` | Toggle sidebar (drag its edge to resize or close it, double-click the edge to reset) |
-| `Ctrl+,` | Settings (appearance, goo cloud, AI assistants) |
+| `Ctrl+,` | Settings (appearance, layout, goo cloud, updates, AI assistants) |
 | `Ctrl+=` / `Ctrl+-` / `Ctrl+0`, `Ctrl+scroll` | Font size of the page (the sidebar, tabs and status bar stay as they are) |
 | `Ctrl+B` / `Ctrl+I` / `Ctrl+K` | Bold / italic / link (in the editor) |
 | `F2` / `Del` (in the tree) | Rename / delete (to the trash) the selected note or folder |
@@ -127,7 +136,7 @@ Checks:
 ```bash
 npm run typecheck     # svelte-check
 npm test              # Vitest: renderer, themes (contrast of every theme x accent), paths, settings, outside changes
-npm run test:rust     # goo-core and goo-mcp: files, path guarding, search, MCP protocol, endpoint, bridge
+npm run test:rust     # goo-core, goo-mcp, goo-sync, goo-update: files, path guarding, MCP, sync, update check/install
 ```
 
 ## Releases
@@ -155,13 +164,14 @@ src/                 Svelte 5 UI (TypeScript)
   app/               shell, stores (workspace, settings, ui), shortcuts
   backend/           GooBackend interface: tauri.ts (Rust commands) and mock.ts (browser dev mode)
   components/        editor (CodeMirror), markdown (render, highlight, mermaid, view), ui
-  features/          files (sidebar, tree, tabs, status bar, welcome), settings, about
+  features/          files (sidebar, tree, tabs, status bar, welcome), settings, updates, about
   lib/               pure logic: themes, appearance, contrast audit, paths
   styles/themes.css  every colour in the app (31 themes, 18 accents)
 src-tauri/           the Tauri shell: window, plugins and the commands the UI calls
 crates/goo-core/     file logic in plain Rust (no Tauri), unit-tested on its own
 crates/goo-mcp/      MCP server: note tools, localhost endpoint, `goo --mcp-stdio` bridge (no Tauri)
 crates/goo-sync/     goo cloud sync engine: scan, 3-way merge, pull/push, device sign-in (no Tauri)
+crates/goo-update/   in-app updates: GitHub release check, install detection, download + verify, per-OS install (no Tauri)
 ```
 
 - The UI never touches the disk itself; it calls a handful of commands (`list_tree`, `read_file`, `write_file`,

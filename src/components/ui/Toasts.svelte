@@ -6,7 +6,14 @@
 <div class="toasts" role="status" aria-live="polite">
   {#each ui.toasts as t (t.id)}
     <div class="toast {t.kind}">
-      <span>{t.text}</span>
+      <span class="text">
+        {t.text}
+        {#if t.detail}<span class="detail">{t.detail}</span>{/if}
+      </span>
+      {#if t.action}
+        {@const action = t.action}
+        <button type="button" class="action" onclick={() => { ui.dismiss(t.id); action.run() }}>{action.label}</button>
+      {/if}
       <IconButton icon="close" label="Dismiss" size={14} onclick={() => ui.dismiss(t.id)} />
     </div>
   {/each}
@@ -37,8 +44,24 @@
     border-color: var(--danger);
     background: var(--danger-soft);
   }
-  .toast span {
+  .text {
     flex: 1;
     overflow-wrap: anywhere;
+  }
+  .detail {
+    display: block;
+    color: var(--text-muted);
+    font-size: 0.88em;
+  }
+  .action {
+    flex-shrink: 0;
+    height: 26px;
+    padding: 0 10px;
+    border: 1px solid var(--accent);
+    border-radius: var(--radius);
+    background: var(--accent);
+    color: var(--accent-fg);
+    font: inherit;
+    cursor: pointer;
   }
 </style>

@@ -7,6 +7,8 @@
     /** Shown on the right, e.g. "F2". */
     hint?: string
     danger?: boolean
+    /** Shown greyed out, cannot be chosen. */
+    disabled?: boolean
     action: () => void
   }
 </script>
@@ -33,7 +35,7 @@
     const r = menu.getBoundingClientRect()
     left = Math.max(4, Math.min(x, window.innerWidth - r.width - 4))
     top = Math.max(4, Math.min(y, window.innerHeight - r.height - 4))
-    menu.querySelector<HTMLButtonElement>('button')?.focus()
+    menu.querySelector<HTMLButtonElement>('button:enabled')?.focus()
   })
 
   function onpointerdown(e: PointerEvent) {
@@ -46,7 +48,7 @@
       onClose()
     } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       e.preventDefault()
-      const buttons = [...menu.querySelectorAll<HTMLButtonElement>('button')]
+      const buttons = [...menu.querySelectorAll<HTMLButtonElement>('button:enabled')]
       const i = buttons.indexOf(document.activeElement as HTMLButtonElement)
       buttons[(i + (e.key === 'ArrowDown' ? 1 : -1) + buttons.length) % buttons.length]?.focus()
     }
@@ -63,7 +65,7 @@
 <div class="menu" role="menu" bind:this={menu} style:left="{left}px" style:top="{top}px">
   {#each items as item, i (i)}
     {#if item}
-      <button type="button" role="menuitem" class:danger={item.danger} onclick={() => choose(item)}>
+      <button type="button" role="menuitem" class:danger={item.danger} disabled={item.disabled} onclick={() => choose(item)}>
         <span class="icon">{#if item.icon}<Icon name={item.icon} size={14} />{/if}</span>
         <span class="label">{item.label}</span>
         {#if item.hint}<span class="hint">{item.hint}</span>{/if}
@@ -99,10 +101,17 @@
     text-align: left;
     cursor: pointer;
   }
-  button:hover,
+  button:enabled:hover,
   button:focus-visible {
     background: var(--surface-hover);
     outline: none;
+  }
+  button:disabled {
+    color: var(--text-faint);
+    cursor: default;
+  }
+  button:disabled .icon {
+    color: inherit;
   }
   button.danger {
     color: var(--danger);

@@ -6,6 +6,7 @@ import type { FilesChanged, OpenEvent, OpenRequest, Tree, TreeNode, Workspace } 
 import { errorMessage, isBackendError } from '../backend/types'
 import { basename, dirname, relativeTo, sepOf, stem } from '../lib/paths'
 import { backend } from './backend'
+import { settings } from './settings.svelte'
 import { ui } from './ui.svelte'
 
 export interface Doc {
@@ -73,7 +74,8 @@ class WorkspaceStore {
     // Started with a file or folder ("Open with goo", `goo notes.md`): that wins over the last session.
     if (await this.takeOpenRequest()) return
     // Otherwise reopen where the user left off (only folders from the recent list are accepted by the backend).
-    const last = readLast()
+    // (turned off in Settings: nothing is restored, and the stored session is cleared below)
+    const last = settings.ui.restoreSession ? readLast() : null
     if (last && this.recents.some((r) => r.root === last.root)) {
       if (await this.openRecent(last.root, false)) {
         for (const p of last.open) await this.openFile(p, { quiet: true, activate: false })
@@ -166,6 +168,23 @@ class WorkspaceStore {
       if (!(await this.confirmLeave())) return
       const ws = await backend.pickWorkspace()
       if (ws) await this.activate(ws)
+    } catch (e) {
+      ui.toast(errorMessage(e), 'error')
+    } finally {
+      this.picking = false
+    }
+  }
+
+  /**
+   * Native file picker for notes. Opens like "Open with goo": in the open folder when the note is inside it,
+   * otherwise in the note's own folder (asking about unsaved notes before switching).
+   */
+  async pickFile() {
+    if (this.picking) return
+    this.picking = true
+    try {
+      const picked = await backend.pickFile()
+      if (picked) await this.handleOpenEvent(picked)
     } catch (e) {
       ui.toast(errorMessage(e), 'error')
     } finally {
@@ -329,6 +348,32 @@ class WorkspaceStore {
     this.docs = this.docs.filter((x) => x !== d)
     if (this.activePath === path) this.activePath = (this.docs[i] ?? this.docs[i - 1])?.path ?? null
     this.persist()
+  }
+
+  /** Closes the tabs in `paths`, asking once about the ones with unsaved edits. False when cancelled. */
+  async closeTabs(paths: string[]): Promise<boolean> {
+    const closing = this.docs.filter((d) => paths.includes(d.path))
+    const dirty = closing.filter(isDirty)
+    if (dirty.length && (await this.confirmDiscard(dirty)) === 'cancel') return false
+    const i = this.docs.findIndex((d) => d.path === this.activePath)
+    const kept = this.docs.filter((d) => !closing.includes(d))
+    if (!kept.some((d) => d.path === this.activePath)) {
+      // like closing one tab: the next tab to the right that stays, else the nearest one to the left
+      const next = this.docs.slice(i + 1).find((d) => kept.includes(d)) ?? this.docs.slice(0, Math.max(i, 0)).reverse().find((d) => kept.includes(d))
+      this.activePath = next?.path ?? null
+    }
+    this.docs = kept
+    this.persist()
+    return true
+  }
+
+  /** Closes every tab but `path`, which becomes the active one. */
+  async closeOthers(path: string) {
+    if (await this.closeTabs(this.docs.filter((d) => d.path !== path).map((d) => d.path))) this.select(path)
+  }
+
+  closeAll() {
+    return this.closeTabs(this.docs.map((d) => d.path))
   }
 
   select(path: string) {

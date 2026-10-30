@@ -1,6 +1,6 @@
 [package]
 name = "goo"
-version = "0.4.0"
+version = "0.5.0"
 description = "goo: a small, local-first Markdown editor"
 edition = "2021"
 license = "MIT"
@@ -19,6 +19,7 @@ tauri-build = { version = "2", features = [] }
 goo-core = { path = "../crates/goo-core" }
 goo-mcp = { path = "../crates/goo-mcp" }
 goo-sync = { path = "../crates/goo-sync" }
+goo-update = { path = "../crates/goo-update" }
 # notices changes made outside goo in the open folder
 notify-debouncer-mini = "0.7"
 # deleting a note or folder moves it to the system trash

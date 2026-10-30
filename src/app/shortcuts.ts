@@ -8,6 +8,9 @@ export const SHORTCUTS: { keys: string; label: string }[] = [
   { keys: 'Ctrl+Shift+S', label: 'Save all' },
   { keys: 'Ctrl+N', label: 'New note' },
   { keys: 'Ctrl+O', label: 'Open folder' },
+  { keys: 'Ctrl+Shift+O', label: 'Open note' },
+  { keys: 'Ctrl+F', label: 'Search notes (in the editor: find in this note)' },
+  { keys: 'Ctrl+Shift+F', label: 'Search notes' },
   { keys: 'Ctrl+W', label: 'Close tab' },
   { keys: 'Ctrl+Tab', label: 'Next tab' },
   { keys: 'Ctrl+E', label: 'Cycle edit / split / preview' },
@@ -34,8 +37,16 @@ export function handleShortcut(e: KeyboardEvent): boolean {
     case key === 'n' && hasFolder:
       void workspace.newNote()
       return true
+    case key === 'o' && e.shiftKey:
+      void workspace.pickFile()
+      return true
     case key === 'o':
       void workspace.pickFolder()
+      return true
+    // In the editor, Ctrl+F is its own find-in-note bar (it handles the key first); everywhere else, search the notes.
+    case key === 'f' && hasFolder && (e.shiftKey || !e.defaultPrevented):
+      settings.setUi({ sidebar: true })
+      ui.findPending = true
       return true
     case key === 'w' && !!workspace.activePath:
       void workspace.close(workspace.activePath!)

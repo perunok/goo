@@ -1,10 +1,12 @@
 /** Which dialog is open, plus toasts. One place, so any part of the app can open any dialog. */
 export type DialogName = 'settings' | 'about' | null
 
-export type SettingsTab = 'appearance' | 'cloud' | 'assistants'
+export type SettingsTab = 'appearance' | 'layout' | 'cloud' | 'updates' | 'assistants'
 export const SETTINGS_TABS: { id: SettingsTab; label: string }[] = [
   { id: 'appearance', label: 'Appearance' },
+  { id: 'layout', label: 'Layout & editor' },
   { id: 'cloud', label: 'goo cloud' },
+  { id: 'updates', label: 'Updates' },
   { id: 'assistants', label: 'AI assistants' },
 ]
 
@@ -12,6 +14,10 @@ export interface Toast {
   id: number
   kind: 'error' | 'info'
   text: string
+  /** A smaller second line. */
+  detail?: string
+  /** A button (e.g. "Update now"); the toast closes when it is pressed. */
+  action?: { label: string; run: () => void }
 }
 
 export interface ConfirmRequest {
@@ -32,6 +38,8 @@ export interface PromptRequest {
 
 class Ui {
   dialog = $state<DialogName>(null)
+  /** The Update goo dialog (it can sit on top of Settings). */
+  updateOpen = $state(false)
   settingsTab = $state<SettingsTab>('appearance')
   toasts = $state<Toast[]>([])
   confirmRequest = $state<ConfirmRequest | null>(null)
@@ -39,6 +47,8 @@ class Ui {
   assistantTool = $state<string | null>(null)
   private assistantTimer: ReturnType<typeof setTimeout> | null = null
   promptRequest = $state<PromptRequest | null>(null)
+  /** Ctrl+F asked for the sidebar's note search; the sidebar focuses it (once it is shown) and clears this. */
+  findPending = $state(false)
   private nextId = 1
 
   open(d: Exclude<DialogName, null>, tab?: SettingsTab) {
@@ -56,10 +66,12 @@ class Ui {
     this.assistantTimer = setTimeout(() => (this.assistantTool = null), 2500)
   }
 
-  toast(text: string, kind: Toast['kind'] = 'info', ms = kind === 'error' ? 6000 : 2500) {
+  /** `ms` 0 keeps the toast until it is dismissed. */
+  toast(text: string, kind: Toast['kind'] = 'info', ms = kind === 'error' ? 6000 : 2500, extra: Pick<Toast, 'detail' | 'action'> = {}) {
     const id = this.nextId++
-    this.toasts = [...this.toasts, { id, kind, text }]
-    setTimeout(() => this.dismiss(id), ms)
+    this.toasts = [...this.toasts, { id, kind, text, ...extra }]
+    if (ms > 0) setTimeout(() => this.dismiss(id), ms)
+    return id
   }
 
   dismiss(id: number) {

@@ -1,16 +1,18 @@
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { getCurrentWindow } from '@tauri-apps/api/window'
-import type { CloudStatus, CloudWorkspace, FilesChanged, GooBackend, McpStatus, OpenEvent, OpenRequest, Tree, Workspace } from './types'
+import type { CloudStatus, CloudWorkspace, FilesChanged, GooBackend, McpStatus, NoteMatch, OpenEvent, OpenRequest, Tree, UpdateCheckResult, UpdateInstallState, Workspace } from './types'
 
 /** The Rust side (src-tauri/src/lib.rs); argument names match the command parameters. */
 export const tauriBackend: GooBackend = {
   kind: 'tauri',
   pickWorkspace: () => invoke<Workspace | null>('pick_workspace'),
+  pickFile: () => invoke<OpenEvent | null>('pick_file'),
   openWorkspace: (root) => invoke<Workspace>('open_workspace', { root }),
   recentWorkspaces: () => invoke<Workspace[]>('recent_workspaces'),
   forgetWorkspace: (root) => invoke<void>('forget_workspace', { root }),
   listTree: () => invoke<Tree>('list_tree'),
+  findNotes: (query) => invoke<NoteMatch[]>('find_notes', { query }),
   readFile: (path) => invoke<string>('read_file', { path }),
   writeFile: (path, contents) => invoke<void>('write_file', { path, contents }),
   createFile: (dir, name, contents) => invoke<string>('create_file', { dir, name, contents }),
@@ -61,6 +63,14 @@ export const tauriBackend: GooBackend = {
     invoke<CloudStatus>('cloud_link', 'workspaceId' in link ? { workspaceId: link.workspaceId, newName: null } : { workspaceId: null, newName: link.newName }),
   cloudUnlink: (root) => invoke<CloudStatus>('cloud_unlink', { root }),
   cloudSyncNow: (root) => invoke<void>('cloud_sync_now', { root: root ?? null }),
+  checkForUpdates: () => invoke<UpdateCheckResult>('check_for_updates'),
+  updateInstallState: () => invoke<UpdateInstallState>('update_state'),
+  downloadUpdate: () => invoke<UpdateInstallState>('download_update'),
+  cancelUpdateDownload: () => invoke<UpdateInstallState>('cancel_update_download'),
+  installUpdate: () => invoke<UpdateInstallState>('install_update'),
+  onUpdateState(handler) {
+    void listen<UpdateInstallState>('update-state', (e) => handler(e.payload))
+  },
   onUiQuery(handler) {
     void listen<{ id: number; kind: string; args: unknown }>('ui-query', async (e) => {
       const { id, kind, args } = e.payload

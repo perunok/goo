@@ -17,6 +17,7 @@
   import Welcome from '../features/files/Welcome.svelte'
   import SettingsDialog from '../features/settings/SettingsDialog.svelte'
   import AboutDialog from '../features/about/AboutDialog.svelte'
+  import UpdateDialog from '../features/updates/UpdateDialog.svelte'
   import WidthControl from '../features/settings/WidthControl.svelte'
 
   const doc = $derived(workspace.active)
@@ -185,12 +186,13 @@
         </div>
       {/if}
     </div>
-    <StatusBar />
+    {#if settings.ui.statusBar}<StatusBar />{/if}
   </main>
 </div>
 
 {#if ui.dialog === 'settings'}<SettingsDialog />{/if}
 {#if ui.dialog === 'about'}<AboutDialog />{/if}
+{#if ui.updateOpen}<UpdateDialog />{/if}
 <ConfirmHost />
 <Toasts />
 
@@ -217,7 +219,7 @@
     user-select: none;
   }
   .app.with-sidebar.resizing,
-  .resizing .side {
+  .resizing.sidebar-closed .side {
     transition: none;
   }
   /* sits on the sidebar's edge (the window's left edge while closed), so it is grabbed from either side */
@@ -264,18 +266,19 @@
     min-width: 0;
     min-height: 0;
     overflow: hidden;
-    transition: visibility 0.16s;
   }
   /* full width while the column animates, so the rows slide instead of re-wrapping */
   .side > :global(.sidebar) {
     width: var(--sidebar-width);
   }
+  /* hides once the column has slid shut; on opening it shows at once, so Ctrl+F can focus the search box */
   .sidebar-closed .side {
     visibility: hidden;
+    transition: visibility 0s 0.16s;
   }
   @media (prefers-reduced-motion: reduce) {
     .app.with-sidebar,
-    .side,
+    .sidebar-closed .side,
     .resizer {
       transition: none;
     }

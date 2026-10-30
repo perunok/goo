@@ -23,6 +23,9 @@ interface UiPrefs {
   sidebar: boolean
   /** Width of the open sidebar in px (the window may show it narrower, see App.svelte). */
   sidebarWidth: number
+  statusBar: boolean
+  /** Reopen the last folder and its open notes on startup. */
+  restoreSession: boolean
   wrap: boolean
   /** Max width of the text column in px (preview, and the editor in edit-only mode); 0 = full width. */
   readingWidth: number
@@ -41,7 +44,7 @@ export const SIDEBAR_WIDTH_MIN = 180
 export const SIDEBAR_WIDTH_MAX = 800
 export const SIDEBAR_WIDTH_DEFAULT = 260
 
-const DEFAULT_UI: UiPrefs = { viewMode: 'split', sidebar: true, sidebarWidth: SIDEBAR_WIDTH_DEFAULT, wrap: true, readingWidth: 820 }
+const DEFAULT_UI: UiPrefs = { viewMode: 'split', sidebar: true, sidebarWidth: SIDEBAR_WIDTH_DEFAULT, statusBar: true, restoreSession: true, wrap: true, readingWidth: 820 }
 
 export function sanitizeSidebarWidth(v: unknown): number {
   if (typeof v !== 'number' || !Number.isFinite(v)) return SIDEBAR_WIDTH_DEFAULT
@@ -61,6 +64,8 @@ function loadUi(): UiPrefs {
       viewMode: VIEW_MODES.includes(raw.viewMode as ViewMode) ? (raw.viewMode as ViewMode) : DEFAULT_UI.viewMode,
       sidebar: typeof raw.sidebar === 'boolean' ? raw.sidebar : DEFAULT_UI.sidebar,
       sidebarWidth: sanitizeSidebarWidth(raw.sidebarWidth),
+      statusBar: typeof raw.statusBar === 'boolean' ? raw.statusBar : DEFAULT_UI.statusBar,
+      restoreSession: typeof raw.restoreSession === 'boolean' ? raw.restoreSession : DEFAULT_UI.restoreSession,
       wrap: typeof raw.wrap === 'boolean' ? raw.wrap : DEFAULT_UI.wrap,
       readingWidth: sanitizeReadingWidth(raw.readingWidth),
     }
