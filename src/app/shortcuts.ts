@@ -13,7 +13,7 @@ export const SHORTCUTS: { keys: string; label: string }[] = [
   { keys: 'Ctrl+E', label: 'Cycle edit / split / preview' },
   { keys: 'Ctrl+\\', label: 'Toggle sidebar' },
   { keys: 'Ctrl+,', label: 'Settings' },
-  { keys: 'Ctrl+= / Ctrl+-', label: 'Font size' },
+  { keys: 'Ctrl+= / Ctrl+- / Ctrl+scroll', label: 'Font size' },
   { keys: 'Ctrl+B / Ctrl+I / Ctrl+K', label: 'Bold / italic / link (editor)' },
 ]
 
@@ -46,7 +46,7 @@ export function handleShortcut(e: KeyboardEvent): boolean {
     case key === 'e':
       settings.cycleViewMode()
       return true
-    case key === '\\':
+    case key === '\\' && hasFolder:
       settings.setUi({ sidebar: !settings.ui.sidebar })
       return true
     case key === ',':
@@ -63,4 +63,25 @@ export function handleShortcut(e: KeyboardEvent): boolean {
       return true
   }
   return false
+}
+
+/** Scroll distance (px) for one font size step: a mouse wheel notch is at least this, a trackpad adds up to it. */
+const ZOOM_WHEEL_STEP = 40
+let zoomWheelDelta = 0
+
+/**
+ * Ctrl+scroll over the page: same zoom as Ctrl+= / Ctrl+-, one step at most per wheel event. Over the sidebar, tabs and
+ * status bar it does nothing (they keep their size, see App.svelte). Plain scrolling is left alone.
+ */
+export function handleZoomWheel(e: WheelEvent) {
+  if (!(e.ctrlKey || e.metaKey) || e.altKey) return
+  e.preventDefault() // always, or the webview's own page zoom would apply (also behind a dialog)
+  if (ui.dialog || ui.confirmRequest || ui.promptRequest) return
+  if (!(e.target instanceof Element && e.target.closest('.content'))) return
+  const px = e.deltaY * (e.deltaMode === e.DOM_DELTA_LINE ? ZOOM_WHEEL_STEP : e.deltaMode === e.DOM_DELTA_PAGE ? 10 * ZOOM_WHEEL_STEP : 1)
+  if (Math.sign(px) !== Math.sign(zoomWheelDelta)) zoomWheelDelta = 0
+  zoomWheelDelta += px
+  if (Math.abs(zoomWheelDelta) < ZOOM_WHEEL_STEP) return
+  settings.bumpFont(zoomWheelDelta < 0 ? 1 : -1)
+  zoomWheelDelta = 0
 }

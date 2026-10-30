@@ -21,6 +21,8 @@ const UI_KEY = 'goo.ui'
 interface UiPrefs {
   viewMode: ViewMode
   sidebar: boolean
+  /** Width of the open sidebar in px (the window may show it narrower, see App.svelte). */
+  sidebarWidth: number
   wrap: boolean
   /** Max width of the text column in px (preview, and the editor in edit-only mode); 0 = full width. */
   readingWidth: number
@@ -35,7 +37,16 @@ export const READING_WIDTH_PRESETS: { label: string; width: number }[] = [
   { label: 'Full', width: 0 },
 ]
 
-const DEFAULT_UI: UiPrefs = { viewMode: 'split', sidebar: true, wrap: true, readingWidth: 820 }
+export const SIDEBAR_WIDTH_MIN = 180
+export const SIDEBAR_WIDTH_MAX = 800
+export const SIDEBAR_WIDTH_DEFAULT = 260
+
+const DEFAULT_UI: UiPrefs = { viewMode: 'split', sidebar: true, sidebarWidth: SIDEBAR_WIDTH_DEFAULT, wrap: true, readingWidth: 820 }
+
+export function sanitizeSidebarWidth(v: unknown): number {
+  if (typeof v !== 'number' || !Number.isFinite(v)) return SIDEBAR_WIDTH_DEFAULT
+  return Math.round(Math.min(SIDEBAR_WIDTH_MAX, Math.max(SIDEBAR_WIDTH_MIN, v)))
+}
 
 export function sanitizeReadingWidth(v: unknown): number {
   if (typeof v !== 'number' || !Number.isFinite(v)) return DEFAULT_UI.readingWidth
@@ -49,6 +60,7 @@ function loadUi(): UiPrefs {
     return {
       viewMode: VIEW_MODES.includes(raw.viewMode as ViewMode) ? (raw.viewMode as ViewMode) : DEFAULT_UI.viewMode,
       sidebar: typeof raw.sidebar === 'boolean' ? raw.sidebar : DEFAULT_UI.sidebar,
+      sidebarWidth: sanitizeSidebarWidth(raw.sidebarWidth),
       wrap: typeof raw.wrap === 'boolean' ? raw.wrap : DEFAULT_UI.wrap,
       readingWidth: sanitizeReadingWidth(raw.readingWidth),
     }
@@ -90,6 +102,7 @@ class Settings {
 
   setUi(patch: Partial<UiPrefs>) {
     if (patch.readingWidth !== undefined) patch = { ...patch, readingWidth: sanitizeReadingWidth(patch.readingWidth) }
+    if (patch.sidebarWidth !== undefined) patch = { ...patch, sidebarWidth: sanitizeSidebarWidth(patch.sidebarWidth) }
     this.ui = { ...this.ui, ...patch }
     browserStore.set(UI_KEY, JSON.stringify(this.ui))
   }
