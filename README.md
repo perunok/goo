@@ -107,9 +107,9 @@ only your note folders, deletes go to the trash). Direct file edits by tools lik
 | `Ctrl+S` / `Ctrl+Shift+S` | Save / save all |
 | `Ctrl+W`, `Ctrl+Tab` | Close tab, next tab |
 | `Ctrl+E` | Cycle edit / split / preview |
-| `Ctrl+\` | Toggle sidebar |
+| `Ctrl+\` | Toggle sidebar (drag its edge to resize or close it, double-click the edge to reset) |
 | `Ctrl+,` | Settings (appearance, layout, goo cloud, updates, AI assistants) |
-| `Ctrl+=` / `Ctrl+-` / `Ctrl+0` | Font size |
+| `Ctrl+=` / `Ctrl+-` / `Ctrl+0`, `Ctrl+scroll` | Font size of the page (the sidebar, tabs and status bar stay as they are) |
 | `Ctrl+B` / `Ctrl+I` / `Ctrl+K` | Bold / italic / link (in the editor) |
 | `F2` / `Del` (in the tree) | Rename / delete (to the trash) the selected note or folder |
 
