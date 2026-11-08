@@ -16,9 +16,9 @@ export function dirname(path: string): string {
   return i <= 0 ? path.slice(0, i + 1) : path.slice(0, i)
 }
 
-/** "notes/todo.md" -> "todo" */
+/** "notes/todo.md" -> "todo" (also "lab/run.ipynb" -> "run") */
 export function stem(path: string): string {
-  return basename(path).replace(/\.(md|markdown|mdown|mkd)$/i, '')
+  return basename(path).replace(/\.(md|markdown|mdown|mkd|ipynb)$/i, '')
 }
 
 /** `path` relative to `root` with `/` separators, or the path itself when it is not inside `root`. */
@@ -56,4 +56,9 @@ export function resolveLink(fromFile: string, href: string): { path: string; fra
 
 export function isMarkdownPath(path: string): boolean {
   return /\.(md|markdown|mdown|mkd)$/i.test(path)
+}
+
+/** A Jupyter notebook: shown read-only in the preview (components/markdown/notebook.ts). */
+export function isNotebookPath(path: string): boolean {
+  return /\.ipynb$/i.test(path)
 }

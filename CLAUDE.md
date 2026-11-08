@@ -74,6 +74,10 @@ npm run app:build      # installers
 - Colours only in `src/styles/themes.css` (ported from Slinger; the `var-*` and HTTP-method tokens were dropped).
   Components use `var(--token)`; `src/styles/themes.test.ts` fails on literal colours anywhere in `src/` and checks
   every theme x accent for contrast. Register new themes in `src/lib/themes.ts`.
+- Notebooks (`.ipynb`) are view-only: `goo_core::is_notebook` lets them into the tree, `plan_open`, watching and
+  `rename_entry` (keeps ".ipynb"), but `list_notes` (search, sync, MCP) leaves them out, `resolve_note` refuses them and
+  `write_file` rejects them. UI: `components/markdown/notebook.ts` turns the JSON into Markdown for `MarkdownView`;
+  App shows notebooks in preview only.
 - Markdown: `components/markdown/render.ts` (marked + DOMPurify allowlist, class filter `md-*`/`tok-*`),
   `highlight.ts` (Lezer -> `tok-*`), `mermaid.ts` (lazy chunk, `securityLevel: 'strict'`, theme variables resolved
   from tokens via a canvas; renders are queued). `MarkdownView.svelte` draws diagrams after `tick()`.

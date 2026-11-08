@@ -100,11 +100,17 @@ pub fn is_markdown(path: &Path) -> bool {
         .unwrap_or(false)
 }
 
+/// A Jupyter notebook (`.ipynb`). goo shows notebooks read-only: they are in the tree and open in the preview, but
+/// they are not notes (no editing, search, sync or AI assistant access).
+pub fn is_notebook(path: &Path) -> bool {
+    path.extension().and_then(|e| e.to_str()).is_some_and(|e| e.eq_ignore_ascii_case("ipynb"))
+}
+
 pub fn is_hidden(name: &str) -> bool {
     name.starts_with('.')
 }
 
-/// Markdown files under `root`, folders first, both sorted case-insensitively. Hidden entries, build/dependency
+/// Markdown files (and notebooks, see `is_notebook`) under `root`, folders first, both sorted case-insensitively. Hidden entries, build/dependency
 /// folders and folders that hold only other kinds of files are left out (empty folders are listed). Symlinked folders are not followed (no cycles).
 pub fn list_tree(root: &Path) -> Result<Tree> {
     let mut budget = MAX_TREE_ENTRIES;
@@ -139,7 +145,7 @@ fn walk(dir: &Path, budget: &mut usize) -> Result<Vec<TreeNode>> {
             if !children.is_empty() || empty {
                 dirs.push(TreeNode { name, path: path_string(&path), kind: NodeKind::Dir, children: Some(children) });
             }
-        } else if (ft.is_file() || ft.is_symlink()) && is_markdown(&path) {
+        } else if (ft.is_file() || ft.is_symlink()) && (is_markdown(&path) || is_notebook(&path)) {
             files.push(TreeNode { name, path: path_string(&path), kind: NodeKind::File, children: None });
         }
     }
@@ -174,7 +180,7 @@ pub fn classify_change(root: &Path, path: &Path) -> WatchedChange {
     if dirs.iter().any(|d| is_hidden(d) || SKIPPED_DIRS.contains(&d.as_str())) || is_hidden(last) {
         return WatchedChange::Ignore;
     }
-    if is_markdown(path) {
+    if is_markdown(path) || is_notebook(path) {
         WatchedChange::Note
     } else if path.is_dir() || path.extension().is_none() {
         // a folder (or one that was just removed, so it can no longer be checked)
@@ -267,6 +273,9 @@ pub fn resolve_note(root: &Path, rel: &str) -> Result<PathBuf> {
     if !resolved.is_file() {
         return Err(CoreError::new(ErrorCode::NotFound, format!("{rel} is not a file")));
     }
+    if is_notebook(&resolved) {
+        return Err(CoreError::new(ErrorCode::InvalidName, format!("{rel} is a notebook; goo only shows notebooks, it does not let tools read or change them")));
+    }
     Ok(resolved)
 }
 
@@ -299,13 +308,15 @@ pub fn create_note_at(root: &Path, rel: &str, contents: &str) -> Result<PathBuf>
     Ok(file)
 }
 
-/// Every note under `root` (same filters as the tree), as paths.
+/// Every note under `root` (same filters as the tree, without notebooks), as paths. Search, sync and AI assistants
+/// work from this list.
 pub fn list_notes(root: &Path) -> Result<(Vec<PathBuf>, bool)> {
     fn collect(nodes: &[TreeNode], out: &mut Vec<PathBuf>) {
         for n in nodes {
             match &n.children {
                 Some(c) => collect(c, out),
-                None => out.push(PathBuf::from(&n.path)),
+                None if is_markdown(Path::new(&n.path)) => out.push(PathBuf::from(&n.path)),
+                None => {}
             }
         }
     }
@@ -459,12 +470,16 @@ fn rename_checked(from: &Path, to: &Path) -> Result<()> {
 }
 
 /// Renames a note or folder where it is. A note keeps a Markdown extension (".md" is added when the new name has
-/// none). Returns the new path.
+/// none), a notebook keeps ".ipynb". Returns the new path.
 pub fn rename_entry(root: &Path, path: &Path, new_name: &str) -> Result<PathBuf> {
     let from = entry_inside(root, path)?;
     let name = validate_name(new_name)?;
     let mut to = from.with_file_name(name);
-    if !from.is_dir() && !is_markdown(&to) {
+    if is_notebook(&from) {
+        if !is_notebook(&to) {
+            to = from.with_file_name(format!("{name}.ipynb"));
+        }
+    } else if !from.is_dir() && !is_markdown(&to) {
         to = from.with_file_name(format!("{name}.md"));
     }
     rename_checked(&from, &to)?;
@@ -683,13 +698,13 @@ pub fn plan_open(current_root: Option<&Path>, paths: &[PathBuf]) -> Result<OpenP
     let mut skipped = Vec::new();
     for p in paths {
         match fs::canonicalize(p) {
-            Ok(c) if c.is_dir() || is_markdown(&c) => canon.push(c),
+            Ok(c) if c.is_dir() || is_markdown(&c) || is_notebook(&c) => canon.push(c),
             _ => skipped.push(p.clone()),
         }
     }
     let Some(first) = canon.first().cloned() else {
         let what = paths.first().map(|p| p.display().to_string()).unwrap_or_default();
-        return Err(CoreError::new(ErrorCode::InvalidName, format!("{what} is not a Markdown file or a folder")));
+        return Err(CoreError::new(ErrorCode::InvalidName, format!("{what} is not a Markdown file, a notebook or a folder")));
     };
     let root = if first.is_dir() {
         first.clone()

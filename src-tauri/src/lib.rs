@@ -103,7 +103,11 @@ async fn pick_file(app: AppHandle, state: State<'_, AppState>) -> CmdResult<Opti
         return Ok(None);
     }
     let _guard = PickingGuard(&state.picking);
-    let mut dialog = app.dialog().file().set_title("Open notes").add_filter("Markdown", goo_core::MARKDOWN_EXTENSIONS);
+    let mut dialog = app
+        .dialog()
+        .file()
+        .set_title("Open notes")
+        .add_filter("Markdown and notebooks", &[goo_core::MARKDOWN_EXTENSIONS, &["ipynb"]].concat());
     #[cfg(desktop)]
     if let Some(window) = app.get_webview_window("main") {
         dialog = dialog.set_parent(&window);
@@ -170,7 +174,11 @@ async fn read_file(path: String, state: State<'_, AppState>) -> CmdResult<String
 #[tauri::command]
 async fn write_file(path: String, contents: String, state: State<'_, AppState>) -> CmdResult<()> {
     let root = current_root(&state)?;
-    goo_core::write_atomic(&goo_core::resolve_inside(&root, Path::new(&path))?, &contents)
+    let file = goo_core::resolve_inside(&root, Path::new(&path))?;
+    if goo_core::is_notebook(&file) {
+        return Err(CoreError::new(ErrorCode::InvalidName, "Notebooks are read-only in goo"));
+    }
+    goo_core::write_atomic(&file, &contents)
 }
 
 /// Creates `name` (".md" appended if needed) in `dir` and returns its path.

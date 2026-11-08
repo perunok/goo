@@ -10,6 +10,7 @@ const fail = (code: ErrorCode, message: string): never => {
 }
 
 const MD = /\.(md|markdown|mdown|mkd)$/i
+const NOTEBOOK = /\.ipynb$/i
 
 /** Knobs for the pretend updater (tests, and `?mockUpdate=none|manual` in the browser). */
 export interface MockUpdates {
@@ -202,7 +203,7 @@ export function createMockBackend(opts: { latencyMs?: number; files?: Record<str
       const words = query.toLowerCase().split(/\s+/).filter(Boolean)
       if (!words.length) fail('invalid_name', 'the search text is empty')
       const notes: string[] = []
-      const walk = (nodes: TreeNode[]) => nodes.forEach((n) => (n.children ? walk(n.children) : notes.push(n.path)))
+      const walk = (nodes: TreeNode[]) => nodes.forEach((n) => (n.children ? walk(n.children) : MD.test(n.path) && notes.push(n.path)))
       walk(tree().nodes)
       return notes
         .filter((p) => {
@@ -230,6 +231,7 @@ export function createMockBackend(opts: { latencyMs?: number; files?: Record<str
     async writeFile(path, contents) {
       await wait()
       if (!files.has(inside(path))) fail('not_found', `${path} does not exist`)
+      if (NOTEBOOK.test(path)) fail('invalid_name', 'Notebooks are read-only in goo')
       files.set(path, contents)
     },
     async createFile(dir, name, contents) {
@@ -246,7 +248,8 @@ export function createMockBackend(opts: { latencyMs?: number; files?: Record<str
       const n = validName(newName)
       const parent = inside(path).slice(0, path.lastIndexOf('/'))
       const isNote = files.has(path)
-      const to = `${parent}/${isNote && !MD.test(n) ? `${n}.md` : n}`
+      const ext = NOTEBOOK.test(path) ? (NOTEBOOK.test(n) ? '' : '.ipynb') : isNote && !MD.test(n) ? '.md' : ''
+      const to = `${parent}/${n}${ext}`
       return relocate(path, to)
     },
     async moveEntry(path, destDir) {

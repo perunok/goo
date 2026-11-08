@@ -4,13 +4,15 @@
  */
 import { editorSelection, lineAt } from '../components/editor/selection'
 import { mermaidError } from '../components/markdown/mermaid'
+import { isNotebookPath } from '../lib/paths'
 import { isDirty, workspace } from './workspace.svelte'
 
 export async function answerUiQuery(kind: string, args: unknown): Promise<unknown> {
   switch (kind) {
     case 'open_note': {
       const d = workspace.active
-      if (!d) return { path: null }
+      // notebooks are shown, not handed to AI assistants
+      if (!d || isNotebookPath(d.path)) return { path: null }
       const sel = editorSelection.path === d.path ? editorSelection : { from: 0, to: 0 }
       const from = Math.min(sel.from, sel.to, d.text.length)
       const to = Math.min(Math.max(sel.from, sel.to), d.text.length)

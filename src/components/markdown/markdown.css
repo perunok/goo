@@ -298,3 +298,25 @@
   white-space: pre-wrap;
   color: var(--text-muted);
 }
+
+/* Jupyter notebooks (notebook.ts): saved outputs under their code cell */
+.md-doc :where(.md-nb-out, .md-nb-err) {
+  margin-top: -0.4em;
+  padding-left: 0.8em;
+  border-left: 3px solid var(--border-strong);
+  overflow-x: auto;
+}
+.md-doc .md-nb-err {
+  border-left-color: var(--danger);
+}
+.md-doc :where(.md-nb-out, .md-nb-err) > :first-child {
+  margin-top: 0;
+}
+.md-doc :where(.md-nb-out, .md-nb-err) pre.md-code {
+  padding: 0.3em 0;
+  border: 0;
+  background: transparent;
+}
+.md-doc .md-nb-err pre.md-code {
+  color: var(--danger);
+}

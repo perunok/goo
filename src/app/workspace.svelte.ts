@@ -4,7 +4,7 @@
  */
 import type { FilesChanged, OpenEvent, OpenRequest, Tree, TreeNode, Workspace } from '../backend/types'
 import { errorMessage, isBackendError } from '../backend/types'
-import { basename, dirname, relativeTo, sepOf, stem } from '../lib/paths'
+import { basename, dirname, isNotebookPath, relativeTo, sepOf, stem } from '../lib/paths'
 import { backend } from './backend'
 import { settings } from './settings.svelte'
 import { ui } from './ui.svelte'
@@ -277,6 +277,7 @@ class WorkspaceStore {
   }
 
   setText(path: string, text: string) {
+    if (isNotebookPath(path)) return // read-only
     const d = this.docs.find((x) => x.path === path)
     if (d && d.text !== text) d.text = text
   }

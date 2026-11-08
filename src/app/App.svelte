@@ -5,7 +5,8 @@
   import { isDirty, workspace } from './workspace.svelte'
   import { handleShortcut, handleZoomWheel } from './shortcuts'
   import { errorMessage } from '../backend/types'
-  import { isMarkdownPath, resolveLink } from '../lib/paths'
+  import { isMarkdownPath, isNotebookPath, resolveLink } from '../lib/paths'
+  import { notebookPreview } from '../components/markdown/notebook'
   import Editor from '../components/editor/Editor.svelte'
   import MarkdownView from '../components/markdown/MarkdownView.svelte'
   import IconButton from '../components/ui/IconButton.svelte'
@@ -21,7 +22,10 @@
   import WidthControl from '../features/settings/WidthControl.svelte'
 
   const doc = $derived(workspace.active)
-  const mode = $derived(settings.ui.viewMode)
+  // Notebooks are read-only: always the preview, of the notebook turned into Markdown.
+  const notebook = $derived(!!doc && isNotebookPath(doc.path))
+  const mode = $derived(notebook ? 'preview' : settings.ui.viewMode)
+  const previewSource = $derived(doc ? (notebook ? notebookPreview(doc.text) : doc.text) : '')
   let preview: MarkdownView | undefined = $state()
 
   $effect(() => {
@@ -90,8 +94,8 @@
   function openLink(href: string) {
     if (!doc) return
     const target = resolveLink(doc.path, href)
-    if (target && isMarkdownPath(target.path)) void workspace.openFile(target.path, { anchor: target.fragment })
-    else ui.toast('Only links to other notes open in goo for now.')
+    if (target && (isMarkdownPath(target.path) || isNotebookPath(target.path))) void workspace.openFile(target.path, { anchor: target.fragment })
+    else ui.toast('Only links to other notes and notebooks open in goo for now.')
   }
 
   function openExternal(url: string) {
@@ -140,9 +144,13 @@
       <div class="spacer"></div>
       {#if doc}
         <div class="modes" role="group" aria-label="View">
-          <IconButton icon="edit" label="Edit" active={mode === 'edit'} onclick={() => settings.setUi({ viewMode: 'edit' })} />
-          <IconButton icon="split" label="Split" active={mode === 'split'} onclick={() => settings.setUi({ viewMode: 'split' })} />
-          <IconButton icon="eye" label="Preview" active={mode === 'preview'} onclick={() => settings.setUi({ viewMode: 'preview' })} />
+          {#if notebook}
+            <span class="readonly" title="goo shows notebooks but does not edit them">Notebook · read-only</span>
+          {:else}
+            <IconButton icon="edit" label="Edit" active={mode === 'edit'} onclick={() => settings.setUi({ viewMode: 'edit' })} />
+            <IconButton icon="split" label="Split" active={mode === 'split'} onclick={() => settings.setUi({ viewMode: 'split' })} />
+            <IconButton icon="eye" label="Preview" active={mode === 'preview'} onclick={() => settings.setUi({ viewMode: 'preview' })} />
+          {/if}
           <WidthControl />
         </div>
       {/if}
@@ -169,7 +177,7 @@
             {#key doc.path}
               <MarkdownView
                 bind:this={preview}
-                source={doc.text}
+                source={previewSource}
                 paletteVersion={settings.paletteVersion}
                 anchor={doc.pendingAnchor}
                 onAnchorShown={() => (doc.pendingAnchor = null)}
@@ -300,6 +308,13 @@
   }
   .spacer {
     flex: 1;
+  }
+  .readonly {
+    align-self: center;
+    margin: 0 6px;
+    color: var(--text-faint);
+    font-size: 0.85em;
+    white-space: nowrap;
   }
   .modes {
     display: flex;

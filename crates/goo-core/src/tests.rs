@@ -38,6 +38,34 @@ fn tree_lists_markdown_only_folders_first_and_skips_noise() {
 }
 
 #[test]
+fn notebooks_are_shown_but_are_not_notes() {
+    let (_d, root) = ws();
+    touch(&root.join("a.md"), "milk");
+    touch(&root.join("lab/Analysis.ipynb"), r#"{"cells": [], "metadata": {"x": "milk"}}"#);
+    touch(&root.join("only/data.csv"), "");
+    let tree = list_tree(&root).unwrap();
+    let names: Vec<_> = tree.nodes.iter().map(|n| n.name.as_str()).collect();
+    // a folder with only a notebook is listed; one with only other files is not
+    assert_eq!(names, ["lab", "a.md"]);
+    assert_eq!(tree.nodes[0].children.as_ref().unwrap()[0].name, "Analysis.ipynb");
+    // search, sync and AI assistants work from list_notes: no notebooks there
+    let (notes, _) = list_notes(&root).unwrap();
+    assert_eq!(notes, [root.join("a.md")]);
+    assert_eq!(find_notes(&root, "milk", 10).unwrap().len(), 1);
+    assert_eq!(resolve_note(&root, "lab/Analysis.ipynb").unwrap_err().code, ErrorCode::InvalidName);
+    // folder watching reloads an open notebook
+    assert_eq!(classify_change(&root, &root.join("lab/Analysis.ipynb")), WatchedChange::Note);
+    // opening one from outside works like a note
+    let p = plan_open(None, &[root.join("lab/Analysis.ipynb")]).unwrap();
+    assert_eq!((p.root, p.files), (root.join("lab"), vec![root.join("lab/Analysis.ipynb")]));
+    // renaming keeps ".ipynb"
+    let nb = root.join("lab/Analysis.ipynb");
+    assert_eq!(rename_entry(&root, &nb, "Results").unwrap(), root.join("lab/Results.ipynb"));
+    assert_eq!(rename_entry(&root, &root.join("lab/Results.ipynb"), "Final.ipynb").unwrap(), root.join("lab/Final.ipynb"));
+    assert!(is_notebook(Path::new("x/Y.IPYNB")) && !is_notebook(Path::new("x.md")));
+}
+
+#[test]
 fn resolve_inside_refuses_paths_outside_the_root() {
     let (_d, root) = ws();
     touch(&root.join("in.md"), "hi");

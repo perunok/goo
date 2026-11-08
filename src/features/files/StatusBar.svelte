@@ -2,7 +2,7 @@
   import { isDirty, workspace } from '../../app/workspace.svelte'
   import { settings } from '../../app/settings.svelte'
   import { ui } from '../../app/ui.svelte'
-  import { relativeTo } from '../../lib/paths'
+  import { isNotebookPath, relativeTo } from '../../lib/paths'
   import { findTheme } from '../../lib/themes'
   import { ago, cloud } from '../cloud/cloud.svelte'
   import { updates } from '../updates/updates.svelte'
@@ -30,7 +30,9 @@
   <span class="path">
     {#if doc && workspace.workspace}{relativeTo(workspace.workspace.root, doc.path)}{:else if workspace.workspace}{workspace.workspace.root}{/if}
   </span>
-  {#if doc}
+  {#if doc && isNotebookPath(doc.path)}
+    <span>Notebook (read-only)</span>
+  {:else if doc}
     <span>{counts.words.toLocaleString()} words</span>
     <span>{counts.chars.toLocaleString()} chars</span>
     <span class:unsaved={isDirty(doc)}>{isDirty(doc) ? 'Unsaved' : 'Saved'}</span>

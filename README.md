@@ -49,6 +49,9 @@ Regenerate them with `npm run dev` and `npm run screenshots`.
 - **Open with goo** from any file manager (or `goo-notes notes.md` on Linux), or **Open note** in goo (`Ctrl+Shift+O`):
   the note opens in its folder; a selection of notes opens as tabs in the one goo window.
 - **Reading width**: narrow, medium, wide or full, for the preview and the editor.
+- **Jupyter notebooks** (`.ipynb`) show up in the tree and open read-only: Markdown cells, highlighted code and the
+  saved outputs (text, errors, tables, plots). goo does not run or edit notebooks, and they are left out of search,
+  goo cloud and AI assistants.
 - **Links between notes**: `[see this](../other.md#section)` opens the other note and scrolls to the heading. Web
   links open in your browser.
 - **AI assistants (MCP)**: turn on Settings > AI assistants and Claude (Code or Desktop), Cursor, VS Code and other
